@@ -41,6 +41,7 @@ function PlayerContent() {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
   const unityRef = useRef<unknown>(null);
 
   useEffect(() => {
@@ -90,6 +91,26 @@ function PlayerContent() {
       .then((instance: unknown) => {
         unityRef.current = instance;
         setStatus('ready');
+
+        // ── Unlock Web Audio API on first user gesture ──────────────────
+        // Browsers suspend AudioContext until a gesture occurs.
+        // Unity's AudioContext is stored in Module.AL.currentCtx (Unity 2020+).
+        const unlockAudio = () => {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const mod = (instance as any)?.Module;
+            const ctx: AudioContext | undefined = mod?.AL?.currentCtx;
+            if (ctx && ctx.state === 'suspended') {
+              ctx.resume().catch(() => {});
+            }
+          } catch {}
+          setAudioUnlocked(true);
+          document.removeEventListener('pointerdown', unlockAudio);
+          document.removeEventListener('keydown', unlockAudio);
+        };
+        document.addEventListener('pointerdown', unlockAudio, { once: true });
+        document.addEventListener('keydown', unlockAudio, { once: true });
+        // ────────────────────────────────────────────────────────────────
 
         // Wait a moment then send the content URL
         setTimeout(() => {
@@ -209,6 +230,20 @@ function PlayerContent() {
           style={{ width: '100%', height: '100%', background: '#0a0a1a' }}
           tabIndex={-1}
         />
+
+        {/* Audio unlock prompt — shown until first interaction */}
+        {!audioUnlocked && (
+          <div style={{
+            position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+            zIndex: 30, background: 'rgba(0,0,0,.75)', backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255,255,255,.15)', borderRadius: 50,
+            padding: '8px 20px', display: 'flex', alignItems: 'center', gap: 8,
+            color: '#fff', fontSize: '.8rem', fontWeight: 500,
+            animation: 'pulse 2s ease-in-out infinite', pointerEvents: 'none',
+          }}>
+            🔈 Tap anywhere to enable audio
+          </div>
+        )}
       </div>
 
       {/* Load Unity loader script */}
