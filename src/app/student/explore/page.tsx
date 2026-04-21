@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 /* ── Types (match XR AI API responses) ── */
@@ -34,6 +35,8 @@ function meta(name: string) {
 }
 
 export default function StudentExplorePage() {
+  const router = useRouter();
+
   /* ── State ── */
   const [view, setView] = useState<View>('classes');
 
@@ -125,9 +128,8 @@ export default function StudentExplorePage() {
 
     if (!url) { setError('No content URL available for this topic'); return; }
 
-    // Open in XR AI player (new tab avoids iframe auth issues)
-    const playerUrl = `https://www.xraitechnolab.com/3dexperiential-learning/player?content=${encodeURIComponent(url)}`;
-    window.open(playerUrl, '_blank', 'noopener,noreferrer');
+    // Use the internal /player page — avoids xraitechnolab.com login requirement
+    router.push(`/player?content=${encodeURIComponent(url)}&title=${encodeURIComponent(topic.name)}`);
   };
 
   /* ── Breadcrumbs ── */

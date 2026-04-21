@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import styles from '../auth.module.css';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,30 +20,37 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      // Step 1: Resolve username → internal email via server (service role bypasses RLS)
+      const lookupRes = await fetch('/api/auth/lookup-username', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username.trim() }),
+      });
+
+      if (!lookupRes.ok) {
+        setError('Invalid username or password');
+        setLoading(false);
+        return;
+      }
+
+      const { email } = await lookupRes.json();
+
+      // Step 2: Sign in with the resolved internal email
       const { data, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (authError) {
-        setError(authError.message);
+        setError('Invalid username or password');
         setLoading(false);
         return;
       }
 
       if (data.user) {
-        // Get user role
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', data.user.id)
-          .single();
-
-        if (profile?.role === 'admin') {
-          router.push('/admin');
-        } else {
-          router.push('/student');
-        }
+        // Use user_metadata role to avoid querying profiles (which has broken RLS)
+        const role = data.user.user_metadata?.role ?? 'student';
+        router.push(role === 'admin' ? '/admin' : '/student');
         router.refresh();
       }
     } catch {
@@ -74,14 +81,15 @@ export default function LoginPage() {
             )}
 
             <div className="input-group">
-              <label htmlFor="email">Email Address</label>
+              <label htmlFor="username">Username</label>
               <input
-                id="email"
-                type="email"
+                id="username"
+                type="text"
                 className="input"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                placeholder="your_username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
                 required
               />
             </div>
@@ -95,6 +103,7 @@ export default function LoginPage() {
                 placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
                 required
               />
             </div>

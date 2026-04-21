@@ -6,9 +6,14 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import styles from '../auth.module.css';
 
+/** Generates the hidden internal email from a username */
+function internalEmail(username: string) {
+  return `${username.toLowerCase().trim()}@iluzia.myclass`;
+}
+
 export default function SignupPage() {
+  const [username, setUsername] = useState('');
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -23,13 +28,24 @@ export default function SignupPage() {
     setSuccess('');
     setLoading(true);
 
+    const cleanUsername = username.toLowerCase().trim();
+
+    // Basic username validation
+    if (!/^[a-z0-9_]{3,30}$/.test(cleanUsername)) {
+      setError('Username must be 3–30 characters: letters, numbers, underscores only');
+      setLoading(false);
+      return;
+    }
+
     try {
-      // Sign up with Supabase Auth
+      // Sign up using internal email derived from username.
+      // The on_auth_user_created trigger (SECURITY DEFINER) will create the profile.
       const { data, error: authError } = await supabase.auth.signUp({
-        email,
+        email: internalEmail(cleanUsername),
         password,
         options: {
           data: {
+            username: cleanUsername,
             full_name: fullName,
             phone: phone,
             role: 'student',
@@ -38,28 +54,19 @@ export default function SignupPage() {
       });
 
       if (authError) {
-        setError(authError.message);
+        // Email already in use means username is taken
+        if (authError.message.includes('already registered')) {
+          setError('Username is already taken. Please choose another.');
+        } else {
+          setError(authError.message);
+        }
         setLoading(false);
         return;
       }
 
       if (data.user) {
-        // Create profile
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert({
-            id: data.user.id,
-            full_name: fullName,
-            email: email,
-            phone: phone,
-            role: 'student',
-            is_paid: false,
-          });
-
-        if (profileError) {
-          console.error('Profile creation error:', profileError);
-        }
-
+        // Profile is auto-created by the on_auth_user_created trigger (SECURITY DEFINER).
+        // No client-side upsert needed — that caused RLS infinite recursion (42P17).
         setSuccess('Account created successfully! Redirecting...');
         setTimeout(() => {
           router.push('/student');
@@ -100,6 +107,20 @@ export default function SignupPage() {
             )}
 
             <div className="input-group">
+              <label htmlFor="username">Username</label>
+              <input
+                id="username"
+                type="text"
+                className="input"
+                placeholder="your_username (letters, numbers, _)"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                required
+              />
+            </div>
+
+            <div className="input-group">
               <label htmlFor="fullName">Full Name</label>
               <input
                 id="fullName"
@@ -108,19 +129,6 @@ export default function SignupPage() {
                 placeholder="John Doe"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                required
-              />
-            </div>
-
-            <div className="input-group">
-              <label htmlFor="email">Email Address</label>
-              <input
-                id="email"
-                type="email"
-                className="input"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
                 required
               />
             </div>
@@ -148,6 +156,7 @@ export default function SignupPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 minLength={6}
+                autoComplete="new-password"
                 required
               />
             </div>

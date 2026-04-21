@@ -6,6 +6,7 @@
 -- 1. Create profiles table
 CREATE TABLE IF NOT EXISTS public.profiles (
   id uuid REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+  username text UNIQUE,
   full_name text,
   email text,
   phone text,
@@ -18,64 +19,80 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Add username column if upgrading an existing table
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS username text UNIQUE;
+
 -- 2. Enable RLS
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
--- 3. RLS Policies
+-- ============================================
+-- 3. Helper: check admin role WITHOUT triggering RLS
+-- SECURITY DEFINER runs as the function owner (bypasses RLS),
+-- so calling this from inside a policy causes NO recursion.
+-- ============================================
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND role = 'admin'
+  );
+$$;
+
+-- 4. RLS Policies
+
+-- Drop old recursive policies if they exist
+DROP POLICY IF EXISTS "Admins can read all profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Admins can update all profiles" ON public.profiles;
 
 -- Users can read their own profile
-CREATE POLICY "Users can read own profile"
+CREATE POLICY IF NOT EXISTS "Users can read own profile"
   ON public.profiles
   FOR SELECT
   USING (auth.uid() = id);
 
 -- Users can update their own profile
-CREATE POLICY "Users can update own profile"
+CREATE POLICY IF NOT EXISTS "Users can update own profile"
   ON public.profiles
   FOR UPDATE
   USING (auth.uid() = id);
 
 -- Allow insert for authenticated users (for profile creation during signup)
-CREATE POLICY "Users can insert own profile"
+CREATE POLICY IF NOT EXISTS "Users can insert own profile"
   ON public.profiles
   FOR INSERT
   WITH CHECK (auth.uid() = id);
 
--- Admin can read all profiles
+-- Admin can read all profiles (uses helper — no recursion)
 CREATE POLICY "Admins can read all profiles"
   ON public.profiles
   FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles
-      WHERE id = auth.uid() AND role = 'admin'
-    )
-  );
+  USING (public.is_admin());
 
--- Admin can update all profiles
+-- Admin can update all profiles (uses helper — no recursion)
 CREATE POLICY "Admins can update all profiles"
   ON public.profiles
   FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles
-      WHERE id = auth.uid() AND role = 'admin'
-    )
-  );
+  USING (public.is_admin());
 
--- Service role can do everything (for create-student API route)
-CREATE POLICY "Service role full access"
+-- Service role can do everything (for API routes using service role key)
+CREATE POLICY IF NOT EXISTS "Service role full access"
   ON public.profiles
   FOR ALL
   USING (auth.role() = 'service_role');
 
--- 4. Auto-create profile on signup (trigger function)
+-- 5. Auto-create profile on signup (trigger function)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-  INSERT INTO public.profiles (id, full_name, email, phone, role)
+  INSERT INTO public.profiles (id, username, full_name, email, phone, role)
   VALUES (
     new.id,
+    COALESCE(new.raw_user_meta_data->>'username', NULL),
     COALESCE(new.raw_user_meta_data->>'full_name', ''),
     new.email,
     COALESCE(new.raw_user_meta_data->>'phone', ''),
@@ -92,7 +109,7 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- 5. Update timestamp trigger
+-- 6. Update timestamp trigger
 CREATE OR REPLACE FUNCTION public.update_updated_at()
 RETURNS trigger AS $$
 BEGIN
@@ -107,13 +124,13 @@ CREATE TRIGGER update_profiles_updated_at
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
 
 -- ============================================
--- 6. Create your first admin user
+-- 7. Create your first admin user
 -- After running this migration:
 -- 1. Go to Supabase Auth > Users > Add User
--- 2. Create a user with your admin email
--- 3. Run the SQL below to set their role:
+--    Use email: youradminusername@iluzia.myclass
+-- 2. Run the SQL below to set their role and username:
 -- ============================================
 
 -- UPDATE public.profiles
--- SET role = 'admin'
--- WHERE email = 'your-admin@email.com';
+-- SET role = 'admin', username = 'admin'
+-- WHERE email = 'admin@iluzia.myclass';
