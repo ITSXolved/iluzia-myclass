@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
 import { useEffect, useState } from 'react';
 
@@ -35,7 +36,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const navItems = [
     { href: '/admin', label: 'Dashboard', icon: '📊' },
-    { href: '/admin/content', label: 'Content', icon: '📚' },
+    { href: '/admin/courses', label: 'Courses', icon: '🎓' },
+    { href: '/admin/content', label: 'XR Content', icon: '📚' },
     { href: '/admin/students', label: 'Students', icon: '👥' },
   ];
 
@@ -67,21 +69,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
           <Link href="/admin" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--gradient-primary)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '1rem',
-              color: 'white',
-              boxShadow: 'var(--shadow-glow)',
-            }}>✦</div>
+            <Image src="/iluzia-logo.png" alt="iLuZia Lab" width={36} height={36} style={{ objectFit: 'contain', width: 'auto', height: '36px' }} />
             <div>
               <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: '1rem', color: 'var(--neutral-50)' }}>
-                Iluzia My Class
+                iLuZia Lab
               </div>
               <div style={{ fontSize: '0.7rem', color: 'var(--neutral-500)', fontWeight: 500 }}>
                 Admin Panel

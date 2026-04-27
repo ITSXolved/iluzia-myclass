@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import s from './page.module.css';
 
@@ -107,6 +108,7 @@ export default function LandingPage() {
       {/* ── Navbar ── */}
       <nav className={s.nav}>
         <Link href="/" className={s.logo}>
+          <Image src="/iluzia-logo.png" alt="iLuZia Lab" width={40} height={40} style={{ objectFit: 'contain', width: 'auto', height: '40px' }} />
           iLuZia | 3DX
         </Link>
         <div className={s.navLinks}>

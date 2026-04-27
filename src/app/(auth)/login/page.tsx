@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
 import styles from '../auth.module.css';
 
@@ -65,8 +66,8 @@ export default function LoginPage() {
       <div className={styles['auth-container']}>
         <div className={styles['auth-header']}>
           <Link href="/" className={styles['auth-logo']}>
-            <div className={styles['auth-logo-icon']}>✦</div>
-            Iluzia My Class
+            <Image src="/iluzia-logo.png" alt="iLuZia Lab" width={48} height={48} style={{ objectFit: 'contain', width: 'auto', height: '48px' }} />
+            iLuZia Lab
           </Link>
           <h1>Welcome Back</h1>
           <p>Sign in to continue your learning journey</p>

@@ -2,18 +2,22 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const supabase = createClient();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Dev mode: use demo student profile
   const userName = 'Student';
   const isPaid = false;
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     router.push('/login');
   };
 
@@ -59,17 +63,10 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
           <Link href="/student" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: 10,
-              background: 'var(--gradient-primary)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '1rem', color: '#fff',
-              boxShadow: '0 0 24px rgba(124,58,237,.35)',
-              flexShrink: 0,
-            }}>✦</div>
+            <Image src="/iluzia-logo.png" alt="iLuZia Lab" width={36} height={36} style={{ objectFit: 'contain', width: 'auto', height: '36px' }} />
             <div>
               <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: '1rem', color: 'var(--neutral-50)' }}>
-                Iluzia My Class
+                iLuZia Lab
               </div>
               <div style={{ fontSize: '.7rem', color: 'var(--neutral-500)', fontWeight: 500 }}>
                 Student Portal
