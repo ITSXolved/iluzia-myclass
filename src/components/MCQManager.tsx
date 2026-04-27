@@ -256,7 +256,7 @@ export default function MCQManager({ topicId, topicName, bulkTrigger }: { topicI
 
   const updateBulkQ = (idx: number, field: string, value: string) => {
     const updated = [...bulkQuestions];
-    (updated[idx] as Record<string, unknown>)[field] = value;
+    (updated[idx] as unknown as Record<string, unknown>)[field] = value;
     setBulkQuestions(updated);
   };
 
