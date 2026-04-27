@@ -10,6 +10,7 @@ interface SubjectItem {
   name: string;
   description: string | null;
   sort_order: number;
+  image_url?: string | null;
   chapter_count?: number;
 }
 
@@ -26,7 +27,7 @@ export default function AdminSubjectsPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<SubjectItem | null>(null);
-  const [form, setForm] = useState({ name: '', description: '' });
+  const [form, setForm] = useState({ name: '', description: '', image_url: '' });
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
@@ -51,18 +52,18 @@ export default function AdminSubjectsPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const openCreate = () => { setEditing(null); setForm({ name: '', description: '' }); setShowModal(true); };
+  const openCreate = () => { setEditing(null); setForm({ name: '', description: '', image_url: '' }); setShowModal(true); };
   const openEdit = (sub: SubjectItem, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditing(sub);
-    setForm({ name: sub.name, description: sub.description || '' });
+    setForm({ name: sub.name, description: sub.description || '', image_url: sub.image_url || '' });
     setShowModal(true);
   };
 
   const handleSave = async () => {
     if (!form.name.trim()) return;
     setSaving(true);
-    const payload = { name: form.name.trim(), description: form.description.trim() || null, class_id: classId, sort_order: editing ? editing.sort_order : subjects.length };
+    const payload = { name: form.name.trim(), description: form.description.trim() || null, image_url: form.image_url.trim() || null, class_id: classId, sort_order: editing ? editing.sort_order : subjects.length };
     if (editing) await supabase.from('subjects').update(payload).eq('id', editing.id);
     else await supabase.from('subjects').insert(payload);
     setSaving(false); setShowModal(false); loadData();
@@ -123,8 +124,8 @@ export default function AdminSubjectsPage() {
           <div className="content-grid">
             {subjects.map((sub, i) => (
               <div key={sub.id} className="content-card" onClick={() => router.push(`/admin/courses/${syllabusId}/${classId}/${sub.id}`)} style={{ cursor: 'pointer' }}>
-                <div className="content-card-image" style={{ background: colors[i % colors.length] }}>
-                  <span style={{ position: 'relative', zIndex: 2, fontSize: '2.5rem' }}>{getIcon(sub.name)}</span>
+                <div className="content-card-image" style={{ background: sub.image_url ? `url(${sub.image_url}) center/cover no-repeat` : colors[i % colors.length] }}>
+                  {!sub.image_url && <span style={{ position: 'relative', zIndex: 2, fontSize: '2.5rem' }}>{getIcon(sub.name)}</span>}
                 </div>
                 <div className="content-card-body">
                   <h3>{sub.name}</h3>
@@ -160,6 +161,10 @@ export default function AdminSubjectsPage() {
               <div className="input-group">
                 <label>Description</label>
                 <textarea className="input" placeholder="Optional..." value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+              </div>
+              <div className="input-group">
+                <label>Image URL</label>
+                <input className="input" placeholder="Optional image URL..." value={form.image_url} onChange={e => setForm({ ...form, image_url: e.target.value })} />
               </div>
             </div>
             <div className="modal-footer">

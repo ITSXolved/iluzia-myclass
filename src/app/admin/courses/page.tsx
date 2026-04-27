@@ -10,6 +10,7 @@ interface SyllabusItem {
   description: string | null;
   sort_order: number;
   created_at: string;
+  image_url?: string | null;
   class_count?: number;
 }
 
@@ -20,7 +21,7 @@ export default function AdminCoursesPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<SyllabusItem | null>(null);
-  const [form, setForm] = useState({ name: '', description: '' });
+  const [form, setForm] = useState({ name: '', description: '', image_url: '' });
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
@@ -45,14 +46,14 @@ export default function AdminCoursesPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: '', description: '' });
+    setForm({ name: '', description: '', image_url: '' });
     setShowModal(true);
   };
 
   const openEdit = (item: SyllabusItem, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditing(item);
-    setForm({ name: item.name, description: item.description || '' });
+    setForm({ name: item.name, description: item.description || '', image_url: item.image_url || '' });
     setShowModal(true);
   };
 
@@ -62,6 +63,7 @@ export default function AdminCoursesPage() {
     const payload = {
       name: form.name.trim(),
       description: form.description.trim() || null,
+      image_url: form.image_url.trim() || null,
       sort_order: editing ? editing.sort_order : syllabuses.length,
     };
     if (editing) {
@@ -139,9 +141,11 @@ export default function AdminCoursesPage() {
               >
                 <div
                   className="content-card-image"
-                  style={{ background: gradients[i % gradients.length] }}
+                  style={{
+                    background: syl.image_url ? `url(${syl.image_url}) center/cover no-repeat` : gradients[i % gradients.length],
+                  }}
                 >
-                  <span style={{ position: 'relative', zIndex: 2, fontSize: '2.5rem' }}>📋</span>
+                  {!syl.image_url && <span style={{ position: 'relative', zIndex: 2, fontSize: '2.5rem' }}>📋</span>}
                 </div>
                 <div className="content-card-body">
                   <h3>{syl.name}</h3>
@@ -194,6 +198,16 @@ export default function AdminCoursesPage() {
                   placeholder="Optional description..."
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
+                />
+              </div>
+              <div className="input-group">
+                <label htmlFor="syl-image">Image URL</label>
+                <input
+                  id="syl-image"
+                  className="input"
+                  placeholder="Optional image URL..."
+                  value={form.image_url}
+                  onChange={(e) => setForm({ ...form, image_url: e.target.value })}
                 />
               </div>
             </div>

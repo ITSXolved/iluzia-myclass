@@ -50,6 +50,7 @@ export default function LMSContentManager() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [previewMaterial, setPreviewMaterial] = useState<Material | null>(null);
   const [mcqBulkTrigger, setMcqBulkTrigger] = useState(0);
+  const [resourcePickerModal, setResourcePickerModal] = useState(false);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -275,7 +276,12 @@ export default function LMSContentManager() {
                               </div>
                             )}
                             <MCQManager topicId={topic.id} topicName={topic.name} bulkTrigger={mcqBulkTrigger} />
-                            {materials.length === 0 && <p style={{ fontSize: '0.78rem', color: 'var(--neutral-500)', textAlign: 'center', padding: '8px 0' }}>No content yet — use the panel on the right to add.</p>}
+                            {materials.length === 0 && <p style={{ fontSize: '0.78rem', color: 'var(--neutral-500)', textAlign: 'center', padding: '8px 0' }}>No content yet. Click below to add.</p>}
+                            <div style={{ marginTop: '12px', textAlign: 'center' }}>
+                              <button className="btn btn-ghost btn-sm" style={{ color: 'var(--primary-400)', fontSize: '0.8rem', padding: '6px 12px' }} onClick={() => setResourcePickerModal(true)}>
+                                + Add Materials / Quizzes
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -306,79 +312,70 @@ export default function LMSContentManager() {
           </div>
         </div>
 
-        {/* Right Column: Add Resources Panel */}
-        <div style={{ width: '300px', minWidth: '280px', flexShrink: 0 }}>
-          <div style={{ position: 'sticky', top: '20px' }}>
-            {!selectedTopic ? (
-              <div style={{
-                background: 'var(--surface-card)', border: '1px solid var(--surface-glass-border)',
-                borderRadius: '14px', padding: '32px 20px', textAlign: 'center',
-              }}>
-                <div style={{ fontSize: '2rem', marginBottom: '10px' }}>📑</div>
-                <p style={{ fontSize: '0.85rem', color: 'var(--accent-400)' }}>Expand a chapter first to add resources.</p>
-              </div>
-            ) : (
-              <>
-                {/* Learning Resources Grid */}
-                <div style={{
-                  background: 'var(--surface-card)', border: '1px solid var(--surface-glass-border)',
-                  borderRadius: '14px', padding: '20px', marginBottom: '16px',
-                }}>
-                  <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--neutral-500)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '14px' }}>
-                    Learning Resources
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                    {MATERIAL_TYPES.map(t => (
-                      <button key={t.value}
-                        onClick={() => { setEditingMaterial(null); setMaterialForm({ title: '', type: t.value, url: '', description: '' }); setMaterialModal(true); }}
-                        style={{
-                          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
-                          padding: '14px 8px', borderRadius: '12px', cursor: 'pointer',
-                          background: 'rgba(148,163,184,0.04)', border: '1px solid var(--surface-glass-border)',
-                          color: 'var(--neutral-300)', transition: 'all 150ms', fontSize: '0.75rem', fontWeight: 600,
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(124,58,237,0.08)'; e.currentTarget.style.borderColor = 'rgba(124,58,237,0.2)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(148,163,184,0.04)'; e.currentTarget.style.borderColor = 'var(--surface-glass-border)'; }}>
-                        <span style={{ fontSize: '1.4rem' }}>{t.icon}</span>
-                        {t.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+      </div>
 
-                {/* Assessment Types */}
-                <div style={{
-                  background: 'var(--surface-card)', border: '1px solid var(--surface-glass-border)',
-                  borderRadius: '14px', padding: '20px',
-                }}>
-                  <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--neutral-500)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '14px' }}>
-                    Assessment Types
-                  </div>
-                  <button
-                    onClick={() => setMcqBulkTrigger(t => t + 1)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', width: '100%',
-                      borderRadius: '10px', cursor: 'pointer', textAlign: 'left',
-                      background: 'rgba(148,163,184,0.04)', border: '1px solid var(--surface-glass-border)',
-                      transition: 'all 150ms',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(34,197,94,0.06)'; e.currentTarget.style.borderColor = 'rgba(34,197,94,0.15)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(148,163,184,0.04)'; e.currentTarget.style.borderColor = 'var(--surface-glass-border)'; }}>
-                    <span style={{
-                      width: '34px', height: '34px', borderRadius: '8px', background: 'rgba(34,197,94,0.1)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0,
-                    }}>📝</span>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--neutral-100)' }}>Formative Quiz</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--neutral-500)' }}>Auto-grading MCQs</div>
-                    </div>
-                  </button>
+      {/* Resource Picker Modal */}
+      {resourcePickerModal && (
+        <div className="modal-overlay" onClick={() => setResourcePickerModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h2>Add Content</h2>
+              <button className="btn btn-ghost btn-icon" onClick={() => setResourcePickerModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              {/* Learning Resources Grid */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--neutral-500)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '14px' }}>
+                  Learning Resources
                 </div>
-              </>
-            )}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                  {MATERIAL_TYPES.map(t => (
+                    <button key={t.value}
+                      onClick={() => { setResourcePickerModal(false); setEditingMaterial(null); setMaterialForm({ title: '', type: t.value, url: '', description: '' }); setMaterialModal(true); }}
+                      style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
+                        padding: '14px 8px', borderRadius: '12px', cursor: 'pointer',
+                        background: 'rgba(148,163,184,0.04)', border: '1px solid var(--surface-glass-border)',
+                        color: 'var(--neutral-300)', transition: 'all 150ms', fontSize: '0.75rem', fontWeight: 600,
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(124,58,237,0.08)'; e.currentTarget.style.borderColor = 'rgba(124,58,237,0.2)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(148,163,184,0.04)'; e.currentTarget.style.borderColor = 'var(--surface-glass-border)'; }}>
+                      <span style={{ fontSize: '1.4rem' }}>{t.icon}</span>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Assessment Types */}
+              <div>
+                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--neutral-500)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '14px' }}>
+                  Assessment Types
+                </div>
+                <button
+                  onClick={() => { setResourcePickerModal(false); setMcqBulkTrigger(t => t + 1); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', width: '100%',
+                    borderRadius: '10px', cursor: 'pointer', textAlign: 'left',
+                    background: 'rgba(148,163,184,0.04)', border: '1px solid var(--surface-glass-border)',
+                    transition: 'all 150ms',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(34,197,94,0.06)'; e.currentTarget.style.borderColor = 'rgba(34,197,94,0.15)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(148,163,184,0.04)'; e.currentTarget.style.borderColor = 'var(--surface-glass-border)'; }}>
+                  <span style={{
+                    width: '34px', height: '34px', borderRadius: '8px', background: 'rgba(34,197,94,0.1)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0,
+                  }}>📝</span>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--neutral-100)' }}>Formative Quiz</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--neutral-500)' }}>Auto-grading MCQs</div>
+                  </div>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Chapter Modal */}
       {chapterModal && (

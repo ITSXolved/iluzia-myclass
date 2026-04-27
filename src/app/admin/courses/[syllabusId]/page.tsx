@@ -10,6 +10,7 @@ interface ClassItem {
   name: string;
   class_number: number | null;
   description: string | null;
+  image_url?: string | null;
   subject_count?: number;
 }
 
@@ -24,7 +25,7 @@ export default function AdminClassesPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<ClassItem | null>(null);
-  const [form, setForm] = useState({ name: '', class_number: '', description: '' });
+  const [form, setForm] = useState({ name: '', class_number: '', description: '', image_url: '' });
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
@@ -51,11 +52,11 @@ export default function AdminClassesPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const openCreate = () => { setEditing(null); setForm({ name: '', class_number: '', description: '' }); setShowModal(true); };
+  const openCreate = () => { setEditing(null); setForm({ name: '', class_number: '', description: '', image_url: '' }); setShowModal(true); };
   const openEdit = (cls: ClassItem, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditing(cls);
-    setForm({ name: cls.name, class_number: cls.class_number?.toString() || '', description: cls.description || '' });
+    setForm({ name: cls.name, class_number: cls.class_number?.toString() || '', description: cls.description || '', image_url: cls.image_url || '' });
     setShowModal(true);
   };
 
@@ -66,6 +67,7 @@ export default function AdminClassesPage() {
       name: form.name.trim(),
       class_number: form.class_number ? parseInt(form.class_number) : null,
       description: form.description.trim() || null,
+      image_url: form.image_url.trim() || null,
       syllabus_id: syllabusId,
     };
     if (editing) await supabase.from('classes').update(payload).eq('id', editing.id);
@@ -123,8 +125,8 @@ export default function AdminClassesPage() {
           <div className="content-grid">
             {classes.map((cls, i) => (
               <div key={cls.id} className="content-card" onClick={() => router.push(`/admin/courses/${syllabusId}/${cls.id}`)} style={{ cursor: 'pointer' }}>
-                <div className="content-card-image" style={{ background: colors[i % colors.length] }}>
-                  <span style={{ position: 'relative', zIndex: 2, fontSize: '2.5rem' }}>🏫</span>
+                <div className="content-card-image" style={{ background: cls.image_url ? `url(${cls.image_url}) center/cover no-repeat` : colors[i % colors.length] }}>
+                  {!cls.image_url && <span style={{ position: 'relative', zIndex: 2, fontSize: '2.5rem' }}>🏫</span>}
                 </div>
                 <div className="content-card-body">
                   <h3>{cls.name}</h3>
@@ -164,6 +166,10 @@ export default function AdminClassesPage() {
               <div className="input-group">
                 <label>Description</label>
                 <textarea className="input" placeholder="Optional..." value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+              </div>
+              <div className="input-group">
+                <label>Image URL</label>
+                <input className="input" placeholder="Optional image URL..." value={form.image_url} onChange={e => setForm({ ...form, image_url: e.target.value })} />
               </div>
             </div>
             <div className="modal-footer">
