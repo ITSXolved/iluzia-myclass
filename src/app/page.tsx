@@ -117,7 +117,10 @@ export default function LandingPage() {
           <a href="#robotics">Robotics</a>
           <a href="#curriculum">Curriculum</a>
         </div>
-        <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+          <div className={s.navLinks}>
+            <Link href="/login">Log In</Link>
+          </div>
           <Link href="/signup" className={s.ctaPill}>Join the Future</Link>
         </div>
       </nav>
