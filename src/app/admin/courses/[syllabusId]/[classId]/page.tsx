@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import ImageUploader from '@/components/ImageUploader';
 
 interface SubjectItem {
   id: number;
@@ -163,8 +164,13 @@ export default function AdminSubjectsPage() {
                 <textarea className="input" placeholder="Optional..." value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
               </div>
               <div className="input-group">
-                <label>Image URL</label>
-                <input className="input" placeholder="Optional image URL..." value={form.image_url} onChange={e => setForm({ ...form, image_url: e.target.value })} />
+                <label>Subject Image</label>
+                <ImageUploader 
+                  currentUrl={form.image_url} 
+                  onUpload={(url) => setForm({ ...form, image_url: url })} 
+                  onDelete={() => setForm({ ...form, image_url: '' })} 
+                  folderPath="subjects" 
+                />
               </div>
             </div>
             <div className="modal-footer">

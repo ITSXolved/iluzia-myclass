@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import ImageUploader from '@/components/ImageUploader';
 
 interface SyllabusItem {
   id: number;
@@ -201,13 +202,12 @@ export default function AdminCoursesPage() {
                 />
               </div>
               <div className="input-group">
-                <label htmlFor="syl-image">Image URL</label>
-                <input
-                  id="syl-image"
-                  className="input"
-                  placeholder="Optional image URL..."
-                  value={form.image_url}
-                  onChange={(e) => setForm({ ...form, image_url: e.target.value })}
+                <label>Course Image</label>
+                <ImageUploader 
+                  currentUrl={form.image_url} 
+                  onUpload={(url) => setForm({ ...form, image_url: url })} 
+                  onDelete={() => setForm({ ...form, image_url: '' })} 
+                  folderPath="syllabuses" 
                 />
               </div>
             </div>
