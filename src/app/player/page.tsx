@@ -47,6 +47,15 @@ function PlayerContent() {
   useEffect(() => {
     if (!contentUrl) return;
 
+    // Intercept console.error to filter out harmless Unity warnings
+    const originalConsoleError = console.error;
+    console.error = (...args) => {
+      if (typeof args[0] === 'string' && args[0].includes('FS.syncfs operations in flight at once')) {
+        return; // Ignore this specific Unity WebGL warning
+      }
+      originalConsoleError.apply(console, args);
+    };
+
     // Set Unity config globally before loader runs
     window.__UNITY_CFG__ = {
       rootElId: 'unity-root',
@@ -60,6 +69,7 @@ function PlayerContent() {
       enableCoi: false,
     };
     return () => {
+      console.error = originalConsoleError;
       if (unityRef.current) {
         try {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
