@@ -28,6 +28,9 @@ export default function XRSyncPage() {
   const [topics, setTopics] = useState<XRTopic[]>([]);
   
   const [syncedStatus, setSyncedStatus] = useState<SyncedStatus>({});
+  
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const [syncProgress, setSyncProgress] = useState('');
 
   const fetchExternalData = async (url: string) => {
     const res = await fetch(url);
@@ -82,28 +85,90 @@ export default function XRSyncPage() {
   }, [level, selectedClass, selectedSubject, selectedChapter, supabase]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (!isSyncingAll) {
+      loadData();
+    }
+  }, [loadData, isSyncingAll]);
+
+  const syncToDb = async (itemType: Level, data: any | any[]) => {
+    const res = await fetch('/api/xr/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: itemType, data })
+    });
+    if (!res.ok) throw new Error(`Sync failed for ${itemType}`);
+  };
 
   const handleSync = async (itemType: Level, data: any) => {
     try {
       // First optimistic update
       setSyncedStatus(prev => ({ ...prev, [data.id]: true }));
-      
-      const res = await fetch('/api/xr/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: itemType, data })
-      });
-      
-      if (!res.ok) {
-        throw new Error('Sync failed');
-      }
+      await syncToDb(itemType, data);
     } catch (error) {
       console.error(error);
       alert('Failed to sync item');
       // Revert optimistic update
       setSyncedStatus(prev => ({ ...prev, [data.id]: false }));
+    }
+  };
+
+  const handleSyncAll = async () => {
+    if (!confirm('This will fetch all classes, subjects, chapters, and topics from the XRAI API and sync them to your database. This may take a minute or two. Proceed?')) {
+      return;
+    }
+
+    try {
+      setIsSyncingAll(true);
+      setSyncProgress('Fetching and syncing Classes...');
+      
+      const allClasses = await fetchExternalData('/api/xr/classes');
+      await syncToDb('class', allClasses);
+
+      for (let i = 0; i < allClasses.length; i++) {
+        const cls = allClasses[i];
+        setSyncProgress(`Syncing Subjects for Class ${i + 1}/${allClasses.length} (${cls.name})...`);
+        const subjects = await fetchExternalData(`/api/xr/subjects?class_id=${cls.id}`);
+        
+        if (subjects.length > 0) {
+          const subjectsWithClassId = subjects.map((s: any) => ({ ...s, class_id: cls.id }));
+          await syncToDb('subject', subjectsWithClassId);
+          
+          for (let j = 0; j < subjects.length; j++) {
+            const sub = subjects[j];
+            setSyncProgress(`Syncing Chapters for Subject ${j + 1}/${subjects.length} (${sub.name})...`);
+            const chapters = await fetchExternalData(`/api/xr/chapters?subject_id=${sub.id}`);
+            
+            if (chapters.length > 0) {
+              const chaptersWithSubjectId = chapters.map((c: any) => ({ ...c, subject_id: sub.id }));
+              await syncToDb('chapter', chaptersWithSubjectId);
+              
+              for (let k = 0; k < chapters.length; k++) {
+                const chap = chapters[k];
+                setSyncProgress(`Syncing Topics for Chapter ${k + 1}/${chapters.length} (${chap.name})...`);
+                const topics = await fetchExternalData(`/api/xr/topics?chapter_id=${chap.id}`);
+                
+                if (topics.length > 0) {
+                  const topicsWithChapterId = topics.map((t: any) => ({ ...t, chapter_id: chap.id }));
+                  await syncToDb('topic', topicsWithChapterId);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      setSyncProgress('Sync Complete!');
+      setTimeout(() => {
+        setIsSyncingAll(false);
+        setSyncProgress('');
+        loadData();
+      }, 2000);
+      
+    } catch (error) {
+      console.error('Error during global sync:', error);
+      alert('An error occurred during global sync. Please check console.');
+      setIsSyncingAll(false);
+      setSyncProgress('');
     }
   };
 
@@ -177,16 +242,32 @@ export default function XRSyncPage() {
             </>
           )}
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mt-sm">
           <h1 style={{ fontSize: '1.5rem' }}>XR Synchronization Dashboard</h1>
+          <button 
+            className="btn btn-primary" 
+            onClick={handleSyncAll}
+            disabled={isSyncingAll}
+          >
+            {isSyncingAll ? 'Syncing...' : '🔄 Sync All Content'}
+          </button>
         </div>
         <p className="text-muted text-sm mt-xs">
           Browse external XRAI API content and sync metadata to the local database.
         </p>
+
+        {isSyncingAll && (
+          <div style={{ marginTop: '16px', padding: '16px', background: 'var(--primary-50)', borderRadius: '8px', border: '1px solid var(--primary-100)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div className="spinner" style={{ borderColor: 'var(--primary-300)', borderTopColor: 'var(--primary-600)' }}></div>
+              <strong style={{ color: 'var(--primary-800)' }}>{syncProgress}</strong>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="page-body">
-        {loading ? (
+        {loading || isSyncingAll ? (
           <div className="loading-page">
             <div className="spinner spinner-lg" />
             <p className="text-muted">Fetching from XR API...</p>
