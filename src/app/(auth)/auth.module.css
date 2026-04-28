@@ -9,32 +9,6 @@
   overflow: hidden;
 }
 
-.auth-page::before {
-  content: '';
-  position: absolute;
-  width: 600px;
-  height: 600px;
-  background: rgba(124, 58, 237, 0.12);
-  border-radius: 50%;
-  filter: blur(100px);
-  top: -200px;
-  right: -200px;
-  pointer-events: none;
-}
-
-.auth-page::after {
-  content: '';
-  position: absolute;
-  width: 400px;
-  height: 400px;
-  background: rgba(6, 182, 212, 0.08);
-  border-radius: 50%;
-  filter: blur(80px);
-  bottom: -100px;
-  left: -100px;
-  pointer-events: none;
-}
-
 .auth-container {
   width: 100%;
   max-width: 440px;

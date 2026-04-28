@@ -89,14 +89,15 @@ CREATE POLICY IF NOT EXISTS "Service role full access"
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-  INSERT INTO public.profiles (id, username, full_name, email, phone, role)
+  INSERT INTO public.profiles (id, username, full_name, email, phone, role, class_id)
   VALUES (
     new.id,
     COALESCE(new.raw_user_meta_data->>'username', NULL),
     COALESCE(new.raw_user_meta_data->>'full_name', ''),
     new.email,
     COALESCE(new.raw_user_meta_data->>'phone', ''),
-    COALESCE(new.raw_user_meta_data->>'role', 'student')
+    COALESCE(new.raw_user_meta_data->>'role', 'student'),
+    (new.raw_user_meta_data->>'class_id')::integer
   )
   ON CONFLICT (id) DO NOTHING;
   RETURN new;

@@ -49,7 +49,7 @@ interface BulkQuestionForm {
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 
-export default function MCQManager({ topicId, topicName, bulkTrigger }: { topicId: number; topicName: string; bulkTrigger?: number }) {
+export default function MCQManager({ topicId, topicName, bulkTrigger, readOnly }: { topicId: number; topicName: string; bulkTrigger?: number; readOnly?: boolean }) {
   const supabase = createClient();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
@@ -349,6 +349,26 @@ export default function MCQManager({ topicId, topicName, bulkTrigger }: { topicI
     }, 0);
   };
 
+  const handlePlaySubmit = async () => {
+    setPlaySubmitted(true);
+    if (readOnly && playSet) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        try {
+          await supabase.from('student_quiz_scores').insert({
+            user_id: session.user.id,
+            topic_id: topicId,
+            set_id: playSet.id,
+            score: playScore(),
+            total: playSet.questions.length
+          });
+        } catch (err) {
+          console.error('Quiz save err:', err);
+        }
+      }
+    }
+  };
+
   const handleSave = async () => {
     if (!questionText.trim() || !options.some(o => o.option_text.trim())) return;
     setSaving(true);
@@ -442,10 +462,12 @@ export default function MCQManager({ topicId, topicName, bulkTrigger }: { topicI
 
       {/* Question Sessions */}
       {sets.length === 0 && questions.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--neutral-500)' }}>
-          <span style={{ fontSize: '2rem', display: 'block', marginBottom: '12px' }}>❓</span>
-          <p>No questions yet. Click &quot;+ Add Questions&quot; above to create a quiz session.</p>
-        </div>
+        !readOnly && (
+          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--neutral-500)' }}>
+            <span style={{ fontSize: '2rem', display: 'block', marginBottom: '12px' }}>❓</span>
+            <p>No questions yet. Click &quot;+ Add Questions&quot; above to create a quiz session.</p>
+          </div>
+        )
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {sets.map(s => (
@@ -467,9 +489,11 @@ export default function MCQManager({ topicId, topicName, bulkTrigger }: { topicI
                 </div>
                 <div className="flex gap-xs" onClick={e => e.stopPropagation()}>
                   <button className="btn btn-primary btn-sm" onClick={() => startPlay(s)} style={{ fontSize: '0.8rem' }}>▶ Play</button>
-                  <button className={`btn btn-sm ${deleteSetConfirm === s.id ? 'btn-danger' : 'btn-ghost'}`} onClick={() => handleDeleteSet(s.id)}>
-                    {deleteSetConfirm === s.id ? 'Confirm?' : '🗑️'}
-                  </button>
+                  {!readOnly && (
+                    <button className={`btn btn-sm ${deleteSetConfirm === s.id ? 'btn-danger' : 'btn-ghost'}`} onClick={() => handleDeleteSet(s.id)}>
+                      {deleteSetConfirm === s.id ? 'Confirm?' : '🗑️'}
+                    </button>
+                  )}
                   <span style={{ fontSize: '0.7rem', color: 'var(--neutral-500)', transform: expandedSet === s.id ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 150ms' }}>▶</span>
                 </div>
               </div>
@@ -567,7 +591,7 @@ export default function MCQManager({ topicId, topicName, bulkTrigger }: { topicI
                   {playIndex < total - 1 ? (
                     <button className="btn btn-primary" disabled={!playAnswers[q.id]} onClick={() => setPlayIndex(playIndex + 1)}>Next →</button>
                   ) : (
-                    <button className="btn btn-primary" disabled={Object.keys(playAnswers).length < total} onClick={() => setPlaySubmitted(true)}>Submit</button>
+                    <button className="btn btn-primary" disabled={Object.keys(playAnswers).length < total} onClick={handlePlaySubmit}>Submit</button>
                   )}
                 </div>
               )}

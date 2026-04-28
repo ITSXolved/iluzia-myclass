@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -17,11 +17,34 @@ export default function SignupPage() {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [syllabuses, setSyllabuses] = useState<{ id: number; name: string }[]>([]);
+  const [classes, setClasses] = useState<{ id: number; name: string; syllabus_id: number }[]>([]);
+  const [selectedSyllabus, setSelectedSyllabus] = useState('');
+  const [selectedClass, setSelectedClass] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
+
+  useEffect(() => {
+    async function fetchOptions() {
+      try {
+        const { data: sData, error: sErr } = await supabase.from('syllabuses').select('id, name').order('sort_order', { ascending: true });
+        if (sErr) console.error('Syllabuses fetch error:', sErr);
+        console.log('Fetched syllabuses:', sData);
+        if (sData) setSyllabuses(sData);
+
+        const { data: cData, error: cErr } = await supabase.from('classes').select('id, name, syllabus_id').order('class_number', { ascending: true });
+        if (cErr) console.error('Classes fetch error:', cErr);
+        console.log('Fetched classes:', cData);
+        if (cData) setClasses(cData);
+      } catch (err) {
+        console.error('Fetch exception:', err);
+      }
+    }
+    fetchOptions();
+  }, []);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,6 +61,12 @@ export default function SignupPage() {
       return;
     }
 
+    if (!selectedSyllabus || !selectedClass) {
+      setError('Please select a syllabus and class');
+      setLoading(false);
+      return;
+    }
+
     try {
       // Sign up using internal email derived from username.
       // The on_auth_user_created trigger (SECURITY DEFINER) will create the profile.
@@ -50,6 +79,7 @@ export default function SignupPage() {
             full_name: fullName,
             phone: phone,
             role: 'student',
+            class_id: parseInt(selectedClass, 10),
           },
         },
       });
@@ -161,6 +191,49 @@ export default function SignupPage() {
                 required
               />
             </div>
+
+            <div className="input-group">
+              <label htmlFor="syllabus">Syllabus</label>
+              <select
+                id="syllabus"
+                className="input"
+                value={selectedSyllabus}
+                onChange={(e) => {
+                  setSelectedSyllabus(e.target.value);
+                  setSelectedClass('');
+                }}
+                required
+              >
+                <option value="">Select Syllabus</option>
+                {syllabuses.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedSyllabus && (
+              <div className="input-group">
+                <label htmlFor="class">Class</label>
+                <select
+                  id="class"
+                  className="input"
+                  value={selectedClass}
+                  onChange={(e) => setSelectedClass(e.target.value)}
+                  required
+                >
+                  <option value="">Select Class</option>
+                  {classes
+                    .filter((c) => c.syllabus_id === parseInt(selectedSyllabus, 10))
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            )}
 
             <button
               type="submit"

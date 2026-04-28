@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
@@ -12,9 +12,56 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   const supabase = createClient();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Dev mode: use demo student profile
-  const userName = 'Student';
-  const isPaid = false;
+  const [userName, setUserName] = useState('Student');
+  const [className, setClassName] = useState('Enrolled Class');
+  const [isPaid, setIsPaid] = useState(false);
+
+  useEffect(() => {
+    async function fetchProfile() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('full_name, username, is_paid, classes(name)')
+          .eq('id', session.user.id)
+          .single();
+          
+        if (data) {
+          setUserName(data.full_name || data.username || 'Student');
+          setIsPaid(data.is_paid || false);
+          const classesData = data.classes as any;
+          if (classesData?.name) {
+            setClassName(classesData.name);
+          }
+        }
+      }
+    }
+    fetchProfile();
+
+    // Track active time immediately on load, then every 60 seconds
+    const trackTime = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const today = new Date().toISOString().split('T')[0];
+        const { data } = await supabase
+          .from('student_active_time')
+          .select('id, duration_minutes')
+          .eq('user_id', session.user.id)
+          .eq('session_date', today)
+          .single();
+        if (data) {
+          await supabase.from('student_active_time').update({ duration_minutes: data.duration_minutes + 1 }).eq('id', data.id);
+        } else {
+          await supabase.from('student_active_time').insert({ user_id: session.user.id, session_date: today, duration_minutes: 1 });
+        }
+      }
+    };
+    
+    trackTime(); // Track first minute immediately
+    const interval = setInterval(trackTime, 60000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -23,7 +70,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
   const navItems = [
     { href: '/student', label: 'Dashboard', icon: '🏠' },
-    { href: '/student/explore', label: 'Explore Content', icon: '📚' },
+    { href: '/student/explore', label: 'My Curriculum', icon: '📚' },
   ];
 
   const isActive = (href: string) => {
@@ -113,17 +160,16 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             )}
           </div>
 
-          {/* User chip */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', marginBottom: 8 }}>
             <div style={{
               width: 32, height: 32, borderRadius: '50%',
               background: 'rgba(6,182,212,.15)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: '.8rem', color: 'var(--accent-400)', fontWeight: 700, flexShrink: 0,
-            }}>S</div>
+            }}>{userName.charAt(0).toUpperCase()}</div>
             <div style={{ overflow: 'hidden' }}>
-              <div style={{ fontSize: '.85rem', fontWeight: 600, color: 'var(--neutral-200)' }}>{userName}</div>
-              <div style={{ fontSize: '.7rem', color: 'var(--neutral-500)' }}>Class 6</div>
+              <div style={{ fontSize: '.85rem', fontWeight: 600, color: 'var(--neutral-200)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userName}</div>
+              <div style={{ fontSize: '.7rem', color: 'var(--neutral-500)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{className}</div>
             </div>
           </div>
 
