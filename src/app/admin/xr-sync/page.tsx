@@ -31,6 +31,7 @@ export default function XRSyncPage() {
   
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [syncProgress, setSyncProgress] = useState('');
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const fetchExternalData = async (url: string) => {
     const res = await fetch(url);
@@ -193,8 +194,8 @@ export default function XRSyncPage() {
       const externalTopics = await fetchExternalData(`/api/xr/topics?chapter_id=${chapterId}`);
       const freshTopic = externalTopics.find((t: any) => t.id === topicId);
       if (freshTopic && freshTopic.presigned_url) {
-        // Open the internal player route with the fresh content URL
-        window.open(`/player?content=${encodeURIComponent(freshTopic.content_url)}`, '_blank');
+        // Open the internal player route in an iframe modal
+        setPreviewUrl(`/player?content=${encodeURIComponent(freshTopic.content_url)}`);
       } else {
         alert('Could not fetch playable URL.');
       }
@@ -368,6 +369,18 @@ export default function XRSyncPage() {
           </div>
         )}
       </div>
+
+      {/* Fullscreen Iframe Preview */}
+      {previewUrl && (
+        <div className="modal-overlay" onClick={() => setPreviewUrl(null)} style={{ zIndex: 400, padding: '24px' }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '100%', height: '100%', background: '#000', borderRadius: '16px', overflow: 'hidden', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.7)' }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '12px 20px', background: 'linear-gradient(rgba(0,0,0,0.8), transparent)', display: 'flex', justifyContent: 'flex-end', zIndex: 10 }}>
+              <button className="btn btn-ghost btn-icon" onClick={() => setPreviewUrl(null)} style={{ color: '#fff', background: 'rgba(255,255,255,0.1)', borderRadius: '50%' }}>✕</button>
+            </div>
+            <iframe src={previewUrl} style={{ width: '100%', height: '100%', border: 'none' }} allowFullScreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" />
+          </div>
+        </div>
+      )}
     </>
   );
 }

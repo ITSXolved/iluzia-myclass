@@ -192,7 +192,9 @@ function PlayerContent() {
           display: 'flex', flexDirection: 'column', alignItems: 'center',
           justifyContent: 'center', background: '#0a0a1a', gap: 20,
         }}>
-          <div style={{ fontSize: '3rem', animation: 'float 3s ease-in-out infinite' }}>🥽</div>
+          <div style={{ animation: 'float 3s ease-in-out infinite' }}>
+            <img src="/iluzia-logo.png" alt="Iluzia Logo" style={{ height: '70px', objectFit: 'contain' }} />
+          </div>
           <h2 style={{ color: '#fff', fontSize: '1.2rem' }}>Loading 3D Content…</h2>
 
           {/* Progress bar */}

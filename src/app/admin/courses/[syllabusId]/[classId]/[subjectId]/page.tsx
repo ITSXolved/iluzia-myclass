@@ -152,7 +152,10 @@ export default function LMSContentManager() {
         const externalTopics = await res.json();
         const freshTopic = externalTopics.find((t: any) => t.id === topic_id);
         if (freshTopic && freshTopic.presigned_url) {
-          window.open(`/player?content=${encodeURIComponent(freshTopic.content_url)}`, '_blank');
+          setPreviewMaterial({ 
+            ...mat, 
+            url: `/player?content=${encodeURIComponent(freshTopic.content_url)}` 
+          });
         } else {
           alert('Could not fetch playable URL from XRAI.');
         }
