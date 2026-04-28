@@ -506,8 +506,10 @@ export default function LMSContentManager() {
         <XRPickerModal 
           onClose={() => setXrPickerModal(false)} 
           onSelect={async (topic: XRTopicRecord, chapterId: number) => {
-            setXrPickerModal(false);
-            if (!selectedTopic) return;
+            if (!selectedTopic) {
+              alert("Error: No LMS topic selected.");
+              return;
+            }
             
             setSaving(true);
             const payload = {
@@ -519,7 +521,13 @@ export default function LMSContentManager() {
               sort_order: materials.length
             };
             
-            await supabase.from('materials').insert(payload);
+            const { error } = await supabase.from('materials').insert(payload);
+            if (error) {
+              console.error("Insert error:", error);
+              alert("Failed to save material: " + error.message);
+            } else {
+              setXrPickerModal(false);
+            }
             setSaving(false);
             
             // Reload materials to show the newly added one

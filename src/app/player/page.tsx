@@ -59,6 +59,16 @@ function PlayerContent() {
       goName: 'VeekshaLibraryBehaviourController',
       enableCoi: false,
     };
+    return () => {
+      if (unityRef.current) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (unityRef.current as any).Quit();
+        } catch (e) {
+          console.error('Failed to quit Unity instance:', e);
+        }
+      }
+    };
   }, [contentUrl]);
 
   const handleLoaderReady = () => {
@@ -142,7 +152,7 @@ function PlayerContent() {
         <div style={{ fontSize: '3rem' }}>⚠️</div>
         <h1 style={{ color: '#fff', fontSize: '1.3rem' }}>No Content URL Provided</h1>
         <p style={{ color: '#94a3b8' }}>Select a topic from the explore page to view content.</p>
-        <Link href="/student/explore" className="btn btn-primary">← Back to Explore</Link>
+        <button onClick={() => window.history.back()} className="btn btn-primary">← Go Back</button>
       </div>
     );
   }
@@ -156,10 +166,10 @@ function PlayerContent() {
         background: 'linear-gradient(rgba(0,0,0,.9), rgba(0,0,0,.4), transparent)',
         display: 'flex', alignItems: 'center', gap: 14,
       }}>
-        <Link href="/student/explore" className="btn btn-ghost btn-sm"
-          style={{ color: '#fff', border: '1px solid rgba(255,255,255,.15)' }}>
+        <button onClick={() => window.history.back()} className="btn btn-ghost btn-sm"
+          style={{ color: '#fff', border: '1px solid rgba(255,255,255,.15)', background: 'rgba(0,0,0,0.5)' }}>
           ← Back
-        </Link>
+        </button>
         <h3 style={{ color: '#fff', fontSize: '.9rem', fontWeight: 600, opacity: .9 }}>
           {topicName}
         </h3>
@@ -212,10 +222,10 @@ function PlayerContent() {
           >
             🔗 Open in XR AI Player
           </a>
-          <Link href="/student/explore" className="btn btn-ghost"
+          <button onClick={() => window.history.back()} className="btn btn-ghost"
             style={{ color: '#94a3b8' }}>
-            ← Back to Explore
-          </Link>
+            ← Go Back
+          </button>
         </div>
       )}
 
