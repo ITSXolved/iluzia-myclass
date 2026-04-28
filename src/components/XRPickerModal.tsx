@@ -168,8 +168,25 @@ export default function XRPickerModal({ onClose, onSelect }: XRPickerModalProps)
                   <div key={topic.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', border: '1px solid var(--surface-glass-border)', borderRadius: '8px', background: 'var(--surface-50)' }}>
                     <strong>{topic.name}</strong>
                     <div className="flex gap-sm">
-                      <button className="btn btn-outline btn-sm" onClick={(e) => { e.stopPropagation(); handlePreview(topic.id, selectedChapter.id); }}>
-                        ▶️ View
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handlePreview(topic.id, selectedChapter.id); }}
+                        style={{ 
+                          background: 'linear-gradient(90deg, #8b5cf6, #0ea5e9)', 
+                          color: '#fff', 
+                          border: 'none', 
+                          borderRadius: '50px', 
+                          padding: '6px 14px', 
+                          fontSize: '0.8rem', 
+                          fontWeight: 600, 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '6px', 
+                          cursor: 'pointer',
+                          boxShadow: '0 4px 10px -2px rgba(139, 92, 246, 0.5)'
+                        }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                        Play
                       </button>
                       <button className="btn btn-primary btn-sm" onClick={(e) => { e.stopPropagation(); onSelect(topic, selectedChapter.id); }}>
                         ➕ Add

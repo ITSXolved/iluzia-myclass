@@ -293,7 +293,28 @@ export default function LMSContentManager() {
                                       <span style={{ flex: 1, fontSize: '0.82rem', color: 'var(--neutral-200)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mat.title}</span>
                                       <span className="badge" style={{ fontSize: '0.55rem', padding: '1px 5px', background: 'rgba(124,58,237,0.1)', color: 'var(--primary-300)' }}>{mat.type}</span>
                                       <div className="flex gap-xs">
-                                        {canPreview(mat.type) && <button className="btn btn-ghost" style={{ padding: '1px 3px', fontSize: '0.6rem' }} onClick={() => handlePreview(mat)}>▶️</button>}
+                                        {canPreview(mat.type) && (
+                                          <button 
+                                            onClick={() => handlePreview(mat)}
+                                            style={{ 
+                                              background: 'linear-gradient(90deg, #8b5cf6, #0ea5e9)', 
+                                              color: '#fff', 
+                                              border: 'none', 
+                                              borderRadius: '50px', 
+                                              padding: '4px 14px', 
+                                              fontSize: '0.75rem', 
+                                              fontWeight: 600, 
+                                              display: 'flex', 
+                                              alignItems: 'center', 
+                                              gap: '6px', 
+                                              cursor: 'pointer',
+                                              boxShadow: '0 4px 10px -2px rgba(139, 92, 246, 0.5)'
+                                            }}
+                                          >
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                            Play
+                                          </button>
+                                        )}
                                         <button className="btn btn-ghost" style={{ padding: '1px 3px', fontSize: '0.6rem' }} onClick={() => { setEditingMaterial(mat); setMaterialForm({ title: mat.title, type: mat.type, url: mat.url, description: mat.description || '' }); setMaterialModal(true); }}>✏️</button>
                                         <button className={`btn ${deleteConfirm === `mt-${mat.id}` ? 'btn-danger' : 'btn-ghost'}`} style={{ padding: '1px 3px', fontSize: '0.6rem' }} onClick={() => deleteMaterial(mat.id)}>{deleteConfirm === `mt-${mat.id}` ? '⚠' : '🗑️'}</button>
                                       </div>

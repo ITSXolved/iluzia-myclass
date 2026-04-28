@@ -347,7 +347,26 @@ export default function XRSyncPage() {
                     </td>
                     <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                       <div className="flex gap-sm justify-end">
-                        <button className="btn btn-outline btn-sm" onClick={() => handlePlayTopic(topic.id, selectedChapter!.id)}>▶️ Visualize</button>
+                        <button 
+                          onClick={() => handlePlayTopic(topic.id, selectedChapter!.id)}
+                          style={{ 
+                            background: 'linear-gradient(90deg, #8b5cf6, #0ea5e9)', 
+                            color: '#fff', 
+                            border: 'none', 
+                            borderRadius: '50px', 
+                            padding: '6px 16px', 
+                            fontSize: '0.8rem', 
+                            fontWeight: 600, 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '6px', 
+                            cursor: 'pointer',
+                            boxShadow: '0 4px 10px -2px rgba(139, 92, 246, 0.5)'
+                          }}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                          Play
+                        </button>
                         {!syncedStatus[topic.id] && (
                           <button className="btn btn-primary btn-sm" onClick={() => handleSync('topic', { ...topic, chapter_id: selectedChapter?.id })}>🔄 Sync to DB</button>
                         )}
