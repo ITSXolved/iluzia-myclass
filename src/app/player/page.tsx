@@ -112,9 +112,9 @@ function PlayerContent() {
         unityRef.current = instance;
         setStatus('ready');
 
-        // ── Unlock Web Audio API on first user gesture ──────────────────
-        // Browsers suspend AudioContext until a gesture occurs.
-        // Unity's AudioContext is stored in Module.AL.currentCtx (Unity 2020+).
+        // ── Unlock Web Audio API automatically ──────────────────
+        // Since the player is now loaded in an iframe with allow="autoplay",
+        // the browser should allow audio context to resume immediately without gesture!
         const unlockAudio = () => {
           try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -125,10 +125,14 @@ function PlayerContent() {
             }
           } catch {}
           setAudioUnlocked(true);
-          window.removeEventListener('pointerdown', unlockAudio, { capture: true } as any);
-          window.removeEventListener('keydown', unlockAudio, { capture: true } as any);
         };
-        // Use capture phase so Unity's stopPropagation doesn't block this!
+        
+        // Try to unlock immediately!
+        setTimeout(unlockAudio, 500);
+        setTimeout(unlockAudio, 1500);
+        setTimeout(unlockAudio, 3000);
+
+        // Fallback: Use capture phase so Unity's stopPropagation doesn't block this!
         window.addEventListener('pointerdown', unlockAudio, { capture: true, once: true });
         window.addEventListener('keydown', unlockAudio, { capture: true, once: true });
         // ────────────────────────────────────────────────────────────────
@@ -253,23 +257,6 @@ function PlayerContent() {
           style={{ width: '100%', height: '100%', background: '#0a0a1a' }}
           tabIndex={-1}
         />
-
-        {/* Audio unlock prompt — shown until first interaction */}
-        {!audioUnlocked && (
-          <button style={{
-            position: 'absolute', bottom: 30, left: '50%', transform: 'translateX(-50%)',
-            zIndex: 30, background: 'var(--primary-600)',
-            border: '2px solid rgba(255,255,255,0.3)', borderRadius: 50,
-            padding: '12px 24px', display: 'flex', alignItems: 'center', gap: 8,
-            color: '#fff', fontSize: '0.95rem', fontWeight: 600,
-            cursor: 'pointer',
-            boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5)',
-            animation: 'pulse 2s ease-in-out infinite',
-            pointerEvents: 'auto',
-          }}>
-            🔈 Click to Enable Sound
-          </button>
-        )}
       </div>
 
       {/* Load Unity loader script */}
