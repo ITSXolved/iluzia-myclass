@@ -505,21 +505,26 @@ export default function LMSContentManager() {
       {xrPickerModal && (
         <XRPickerModal 
           onClose={() => setXrPickerModal(false)} 
-          onSelect={(topic: XRTopicRecord, chapterId: number) => {
+          onSelect={async (topic: XRTopicRecord, chapterId: number) => {
             setXrPickerModal(false);
-            setEditingMaterial(null);
-            // Save immediately or open standard material modal to let them edit the title?
-            // Let's open the material modal prefilled so they can review/edit.
-            // Notice we save the topic_id AND chapter_id in the url as a JSON string so we can fetch it later, 
-            // OR just rely on topic.id since `/api/xr/topics?chapter_id=X` requires chapter_id.
-            // Actually, we can just save it as `topicId:chapterId` or a stringified JSON object.
-            setMaterialForm({ 
-              title: topic.name, 
-              type: 'xr', 
-              url: JSON.stringify({ topic_id: topic.id, chapter_id: chapterId }), 
-              description: 'XR Experiential Learning Content' 
-            });
-            setMaterialModal(true);
+            if (!selectedTopic) return;
+            
+            setSaving(true);
+            const payload = {
+              title: topic.name,
+              type: 'xr',
+              url: JSON.stringify({ topic_id: topic.id, chapter_id: chapterId }),
+              description: 'XR Experiential Learning Content',
+              topic_id: selectedTopic.id,
+              sort_order: materials.length
+            };
+            
+            await supabase.from('materials').insert(payload);
+            setSaving(false);
+            
+            // Reload materials to show the newly added one
+            const { data } = await supabase.from('materials').select('*').eq('topic_id', selectedTopic.id).order('sort_order');
+            setMaterials(data || []);
           }} 
         />
       )}
