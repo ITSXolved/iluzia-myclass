@@ -38,6 +38,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin', label: 'Dashboard', icon: '📊' },
     { href: '/admin/courses', label: 'Courses', icon: '🎓' },
     { href: '/admin/content', label: 'XR Content', icon: '📚' },
+    { href: '/admin/xr-sync', label: 'XR Sync', icon: '🔄' },
     { href: '/admin/students', label: 'Students', icon: '👥' },
   ];
 
