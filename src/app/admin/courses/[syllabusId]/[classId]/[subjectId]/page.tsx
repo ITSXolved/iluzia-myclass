@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import MCQManager from '@/components/MCQManager';
+import XRPickerModal, { XRTopicRecord } from '@/components/XRPickerModal';
 
 interface Chapter { id: number; name: string; description: string | null; sort_order: number; }
 interface Topic { id: number; chapter_id: number; name: string; description: string | null; sort_order: number; }
@@ -14,6 +15,7 @@ const MATERIAL_TYPES = [
   { value: 'iframe', label: 'Iframe Embed', icon: '🌐' },
   { value: 'video', label: 'Video', icon: '🎬' },
   { value: 'youtube', label: 'YouTube', icon: '▶️' },
+  { value: 'xr', label: 'XR Experiential Content', icon: '🥽' },
   { value: 'pdf', label: 'PDF Document', icon: '📄' },
   { value: 'link', label: 'External Link', icon: '🔗' },
   { value: 'document', label: 'Document', icon: '📝' },
@@ -51,6 +53,7 @@ export default function LMSContentManager() {
   const [previewMaterial, setPreviewMaterial] = useState<Material | null>(null);
   const [mcqBulkTrigger, setMcqBulkTrigger] = useState(0);
   const [resourcePickerModal, setResourcePickerModal] = useState(false);
+  const [xrPickerModal, setXrPickerModal] = useState(false);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -138,7 +141,28 @@ export default function LMSContentManager() {
 
   const getMaterialIcon = (type: string) => MATERIAL_TYPES.find(t => t.value === type)?.icon || '📎';
 
-  const canPreview = (type: string) => ['iframe', 'video', 'youtube', 'pdf'].includes(type);
+  const canPreview = (type: string) => ['iframe', 'video', 'youtube', 'pdf', 'xr'].includes(type);
+
+  const handlePreview = async (mat: Material) => {
+    if (mat.type === 'xr') {
+      try {
+        const { topic_id, chapter_id } = JSON.parse(mat.url);
+        const res = await fetch(`/api/xr/topics?chapter_id=${chapter_id}`);
+        if (!res.ok) throw new Error('Failed to fetch from XR API');
+        const externalTopics = await res.json();
+        const freshTopic = externalTopics.find((t: any) => t.id === topic_id);
+        if (freshTopic && freshTopic.presigned_url) {
+          window.open(`/player?content=${encodeURIComponent(freshTopic.content_url)}`, '_blank');
+        } else {
+          alert('Could not fetch playable URL from XRAI.');
+        }
+      } catch (e) {
+        alert('Error loading XR topic visualization.');
+      }
+    } else {
+      setPreviewMaterial(mat);
+    }
+  };
 
   const getPreviewUrl = (mat: Material) => {
     if (mat.type === 'youtube') {
@@ -266,7 +290,7 @@ export default function LMSContentManager() {
                                       <span style={{ flex: 1, fontSize: '0.82rem', color: 'var(--neutral-200)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mat.title}</span>
                                       <span className="badge" style={{ fontSize: '0.55rem', padding: '1px 5px', background: 'rgba(124,58,237,0.1)', color: 'var(--primary-300)' }}>{mat.type}</span>
                                       <div className="flex gap-xs">
-                                        {canPreview(mat.type) && <button className="btn btn-ghost" style={{ padding: '1px 3px', fontSize: '0.6rem' }} onClick={() => setPreviewMaterial(mat)}>▶️</button>}
+                                        {canPreview(mat.type) && <button className="btn btn-ghost" style={{ padding: '1px 3px', fontSize: '0.6rem' }} onClick={() => handlePreview(mat)}>▶️</button>}
                                         <button className="btn btn-ghost" style={{ padding: '1px 3px', fontSize: '0.6rem' }} onClick={() => { setEditingMaterial(mat); setMaterialForm({ title: mat.title, type: mat.type, url: mat.url, description: mat.description || '' }); setMaterialModal(true); }}>✏️</button>
                                         <button className={`btn ${deleteConfirm === `mt-${mat.id}` ? 'btn-danger' : 'btn-ghost'}`} style={{ padding: '1px 3px', fontSize: '0.6rem' }} onClick={() => deleteMaterial(mat.id)}>{deleteConfirm === `mt-${mat.id}` ? '⚠' : '🗑️'}</button>
                                       </div>
@@ -331,7 +355,16 @@ export default function LMSContentManager() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
                   {MATERIAL_TYPES.map(t => (
                     <button key={t.value}
-                      onClick={() => { setResourcePickerModal(false); setEditingMaterial(null); setMaterialForm({ title: '', type: t.value, url: '', description: '' }); setMaterialModal(true); }}
+                      onClick={() => { 
+                        setResourcePickerModal(false); 
+                        if (t.value === 'xr') {
+                          setXrPickerModal(true);
+                        } else {
+                          setEditingMaterial(null); 
+                          setMaterialForm({ title: '', type: t.value, url: '', description: '' }); 
+                          setMaterialModal(true); 
+                        }
+                      }}
                       style={{
                         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
                         padding: '14px 8px', borderRadius: '12px', cursor: 'pointer',
@@ -466,6 +499,29 @@ export default function LMSContentManager() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* XR Content Picker Modal */}
+      {xrPickerModal && (
+        <XRPickerModal 
+          onClose={() => setXrPickerModal(false)} 
+          onSelect={(topic: XRTopicRecord, chapterId: number) => {
+            setXrPickerModal(false);
+            setEditingMaterial(null);
+            // Save immediately or open standard material modal to let them edit the title?
+            // Let's open the material modal prefilled so they can review/edit.
+            // Notice we save the topic_id AND chapter_id in the url as a JSON string so we can fetch it later, 
+            // OR just rely on topic.id since `/api/xr/topics?chapter_id=X` requires chapter_id.
+            // Actually, we can just save it as `topicId:chapterId` or a stringified JSON object.
+            setMaterialForm({ 
+              title: topic.name, 
+              type: 'xr', 
+              url: JSON.stringify({ topic_id: topic.id, chapter_id: chapterId }), 
+              description: 'XR Experiential Learning Content' 
+            });
+            setMaterialModal(true);
+          }} 
+        />
       )}
     </>
   );
