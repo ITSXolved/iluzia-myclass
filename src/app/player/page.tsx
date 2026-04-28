@@ -125,11 +125,12 @@ function PlayerContent() {
             }
           } catch {}
           setAudioUnlocked(true);
-          document.removeEventListener('pointerdown', unlockAudio);
-          document.removeEventListener('keydown', unlockAudio);
+          window.removeEventListener('pointerdown', unlockAudio, { capture: true } as any);
+          window.removeEventListener('keydown', unlockAudio, { capture: true } as any);
         };
-        document.addEventListener('pointerdown', unlockAudio, { once: true });
-        document.addEventListener('keydown', unlockAudio, { once: true });
+        // Use capture phase so Unity's stopPropagation doesn't block this!
+        window.addEventListener('pointerdown', unlockAudio, { capture: true, once: true });
+        window.addEventListener('keydown', unlockAudio, { capture: true, once: true });
         // ────────────────────────────────────────────────────────────────
 
         // Wait a moment then send the content URL
@@ -255,16 +256,19 @@ function PlayerContent() {
 
         {/* Audio unlock prompt — shown until first interaction */}
         {!audioUnlocked && (
-          <div style={{
-            position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-            zIndex: 30, background: 'rgba(0,0,0,.75)', backdropFilter: 'blur(8px)',
-            border: '1px solid rgba(255,255,255,.15)', borderRadius: 50,
-            padding: '8px 20px', display: 'flex', alignItems: 'center', gap: 8,
-            color: '#fff', fontSize: '.8rem', fontWeight: 500,
-            animation: 'pulse 2s ease-in-out infinite', pointerEvents: 'none',
+          <button style={{
+            position: 'absolute', bottom: 30, left: '50%', transform: 'translateX(-50%)',
+            zIndex: 30, background: 'var(--primary-600)',
+            border: '2px solid rgba(255,255,255,0.3)', borderRadius: 50,
+            padding: '12px 24px', display: 'flex', alignItems: 'center', gap: 8,
+            color: '#fff', fontSize: '0.95rem', fontWeight: 600,
+            cursor: 'pointer',
+            boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5)',
+            animation: 'pulse 2s ease-in-out infinite',
+            pointerEvents: 'auto',
           }}>
-            🔈 Tap anywhere to enable audio
-          </div>
+            🔈 Click to Enable Sound
+          </button>
         )}
       </div>
 
