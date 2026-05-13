@@ -33,7 +33,7 @@ export default function LMSContentManager() {
   const [subjectName, setSubjectName] = useState('');
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
-  const [materials, setMaterials] = useState<Material[]>([]);
+  const [materialsByTopic, setMaterialsByTopic] = useState<Record<number, Material[]>>({});
   const [loading, setLoading] = useState(true);
   const [expandedChapters, setExpandedChapters] = useState<Set<number>>(new Set());
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
@@ -54,8 +54,10 @@ export default function LMSContentManager() {
   const [mcqBulkTrigger, setMcqBulkTrigger] = useState(0);
   const [resourcePickerModal, setResourcePickerModal] = useState(false);
   const [xrPickerModal, setXrPickerModal] = useState(false);
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  // Material drag state — supports cross-topic moves
+  const [dragMat, setDragMat] = useState<{ mat: Material; fromTopicId: number; fromIdx: number } | null>(null);
+  const [dragMatOverTopicId, setDragMatOverTopicId] = useState<number | null>(null);
+  const [dragMatOverIdx, setDragMatOverIdx] = useState<number | null>(null);
   // Per-chapter topic drag state
   const [dragTopic, setDragTopic] = useState<{ chapterId: number; from: number; over: number | null } | null>(null);
   const [previewIframeError, setPreviewIframeError] = useState(false);
@@ -84,13 +86,19 @@ export default function LMSContentManager() {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
+  // Lazy-load materials per topic; cache in map so switching topics doesn't re-fetch
   useEffect(() => {
-    if (!selectedTopic) { setMaterials([]); return; }
+    if (!selectedTopic) return;
+    if (materialsByTopic[selectedTopic.id]) return; // already cached
     (async () => {
       const { data } = await supabase.from('materials').select('*').eq('topic_id', selectedTopic.id).order('sort_order');
-      setMaterials(data || []);
+      setMaterialsByTopic(prev => ({ ...prev, [selectedTopic.id]: data || [] }));
     })();
-  }, [selectedTopic, supabase]);
+  }, [selectedTopic, supabase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const getMats = (topicId: number) => materialsByTopic[topicId] || [];
+  const setMats = (topicId: number, mats: Material[]) =>
+    setMaterialsByTopic(prev => ({ ...prev, [topicId]: mats }));
 
   const toggleChapter = (id: number) => {
     setExpandedChapters(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -131,17 +139,25 @@ export default function LMSContentManager() {
   const saveMaterial = async () => {
     if (!materialForm.title.trim() || !materialForm.url.trim() || !selectedTopic) return;
     setSaving(true);
-    const payload = { title: materialForm.title.trim(), type: materialForm.type, url: materialForm.url.trim(), description: materialForm.description.trim() || null, topic_id: selectedTopic.id, sort_order: editingMaterial ? editingMaterial.sort_order : materials.length };
+    const topicMats = getMats(selectedTopic.id);
+    const payload = { title: materialForm.title.trim(), type: materialForm.type, url: materialForm.url.trim(), description: materialForm.description.trim() || null, topic_id: selectedTopic.id, sort_order: editingMaterial ? editingMaterial.sort_order : topicMats.length };
     if (editingMaterial) await supabase.from('materials').update(payload).eq('id', editingMaterial.id);
     else await supabase.from('materials').insert(payload);
     setSaving(false); setMaterialModal(false);
     const { data } = await supabase.from('materials').select('*').eq('topic_id', selectedTopic.id).order('sort_order');
-    setMaterials(data || []);
+    setMats(selectedTopic.id, data || []);
   };
   const deleteMaterial = async (id: number) => {
     const key = `mt-${id}`;
-    if (deleteConfirm === key) { await supabase.from('materials').delete().eq('id', id); setDeleteConfirm(null); if (selectedTopic) { const { data } = await supabase.from('materials').select('*').eq('topic_id', selectedTopic.id).order('sort_order'); setMaterials(data || []); } }
-    else { setDeleteConfirm(key); setTimeout(() => setDeleteConfirm(null), 3000); }
+    if (deleteConfirm === key) {
+      const mat = Object.values(materialsByTopic).flat().find(m => m.id === id);
+      await supabase.from('materials').delete().eq('id', id);
+      setDeleteConfirm(null);
+      if (mat) {
+        const updated = getMats(mat.topic_id).filter(m => m.id !== id).map((m, i) => ({ ...m, sort_order: i }));
+        setMats(mat.topic_id, updated);
+      }
+    } else { setDeleteConfirm(key); setTimeout(() => setDeleteConfirm(null), 3000); }
   };
 
   const getMaterialIcon = (type: string) => MATERIAL_TYPES.find(t => t.value === type)?.icon || '📎';
@@ -163,18 +179,27 @@ export default function LMSContentManager() {
     );
   };
 
-  const reorderMaterials = async (from: number, to: number) => {
+  const reorderMaterials = async (topicId: number, from: number, to: number) => {
     if (from === to) return;
-    const reordered = [...materials];
+    const mats = getMats(topicId);
+    const reordered = [...mats];
     const [moved] = reordered.splice(from, 1);
     reordered.splice(to, 0, moved);
-    // Assign fresh sort_order values
     const updated = reordered.map((m, i) => ({ ...m, sort_order: i }));
-    setMaterials(updated);
-    // Batch upsert – one call per row (small lists, acceptable)
-    await Promise.all(
-      updated.map(m => supabase.from('materials').update({ sort_order: m.sort_order }).eq('id', m.id))
-    );
+    setMats(topicId, updated);
+    await Promise.all(updated.map(m => supabase.from('materials').update({ sort_order: m.sort_order }).eq('id', m.id)));
+  };
+
+  /** Move a material from one topic to another */
+  const moveMaterialToTopic = async (mat: Material, fromTopicId: number, toTopicId: number) => {
+    if (fromTopicId === toTopicId) return;
+    const fromMats = getMats(fromTopicId).filter(m => m.id !== mat.id).map((m, i) => ({ ...m, sort_order: i }));
+    const toMats = getMats(toTopicId);
+    const newMat = { ...mat, topic_id: toTopicId, sort_order: toMats.length };
+    setMats(fromTopicId, fromMats);
+    setMats(toTopicId, [...toMats, newMat]);
+    await supabase.from('materials').update({ topic_id: toTopicId, sort_order: toMats.length }).eq('id', mat.id);
+    await Promise.all(fromMats.map(m => supabase.from('materials').update({ sort_order: m.sort_order }).eq('id', m.id)));
   };
 
   const handlePreview = async (mat: Material) => {
@@ -301,16 +326,44 @@ export default function LMSContentManager() {
                             borderRadius: '10px', cursor: 'grab',
                             background: dragTopic?.chapterId === ch.id && dragTopic.over === ti && dragTopic.from !== ti
                               ? 'rgba(124,58,237,0.1)'
-                              : selectedTopic?.id === topic.id ? 'rgba(6,182,212,0.1)' : 'rgba(148,163,184,0.03)',
+                              : dragMatOverTopicId === topic.id && dragMat
+                                ? 'rgba(6,182,212,0.15)' // Highlight if material is dragged over
+                                : selectedTopic?.id === topic.id ? 'rgba(6,182,212,0.1)' : 'rgba(148,163,184,0.03)',
                             border: `1px solid ${
                               dragTopic?.chapterId === ch.id && dragTopic.over === ti && dragTopic.from !== ti
                                 ? 'rgba(124,58,237,0.35)'
-                                : selectedTopic?.id === topic.id ? 'rgba(6,182,212,0.25)' : 'transparent'
+                                : dragMatOverTopicId === topic.id && dragMat
+                                  ? 'rgba(6,182,212,0.4)' // Border highlight for material drop
+                                  : selectedTopic?.id === topic.id ? 'rgba(6,182,212,0.25)' : 'transparent'
                             }`,
                             opacity: dragTopic?.chapterId === ch.id && dragTopic.from === ti ? 0.4 : 1,
                             transition: 'all 150ms',
                           }}
                           onClick={() => setSelectedTopic(selectedTopic?.id === topic.id ? null : topic)}
+                          onDragOver={e => {
+                            if (dragMat && dragMat.fromTopicId !== topic.id) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }
+                          }}
+                          onDragEnter={e => {
+                            if (dragMat && dragMat.fromTopicId !== topic.id) {
+                              e.stopPropagation();
+                              setDragMatOverTopicId(topic.id);
+                            }
+                          }}
+                          onDragLeave={() => {
+                            if (dragMat) setDragMatOverTopicId(null);
+                          }}
+                          onDrop={e => {
+                            if (dragMat && dragMat.fromTopicId !== topic.id) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              moveMaterialToTopic(dragMat.mat, dragMat.fromTopicId, topic.id);
+                              setDragMat(null);
+                              setDragMatOverTopicId(null);
+                            }
+                          }}
                         >
                           {/* Drag handle */}
                           <span
@@ -358,82 +411,54 @@ export default function LMSContentManager() {
                         </div>
                         {/* Inline content under selected topic */}
                         {selectedTopic?.id === topic.id && (
-                          <div style={{ marginLeft: '36px', marginTop: '6px', marginBottom: '8px', padding: '12px 16px', borderRadius: '10px', background: 'rgba(6,182,212,0.03)', borderLeft: '2px solid rgba(6,182,212,0.2)' }}>
-                            {materials.length > 0 && (
+                          <div
+                            style={{ marginLeft: '36px', marginTop: '6px', marginBottom: '8px', padding: '12px 16px', borderRadius: '10px', background: 'rgba(6,182,212,0.03)', borderLeft: '2px solid rgba(6,182,212,0.2)' }}
+                            onDragOver={e => { if (dragMat && dragMat.fromTopicId !== topic.id) e.preventDefault(); }}
+                            onDragEnter={() => { if (dragMat && dragMat.fromTopicId !== topic.id) setDragMatOverTopicId(topic.id); }}
+                            onDragLeave={() => setDragMatOverTopicId(null)}
+                            onDrop={e => {
+                              e.preventDefault();
+                              if (dragMat && dragMat.fromTopicId !== topic.id) {
+                                moveMaterialToTopic(dragMat.mat, dragMat.fromTopicId, topic.id);
+                              } else if (dragMat && dragMatOverIdx !== null) {
+                                reorderMaterials(topic.id, dragMat.fromIdx, dragMatOverIdx);
+                              }
+                              setDragMat(null); setDragMatOverTopicId(null); setDragMatOverIdx(null);
+                            }}
+                          >
+                            {getMats(topic.id).length > 0 && (
                               <div style={{ marginBottom: '12px' }}>
-                                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--neutral-500)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>📎 Materials ({materials.length})</div>
+                                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--neutral-500)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>📎 Materials ({getMats(topic.id).length})</div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                  {materials.map((mat, matIdx) => (
+                                  {getMats(topic.id).map((mat, matIdx) => (
                                     <div
                                       key={mat.id}
                                       draggable
-                                      onDragStart={() => setDragIndex(matIdx)}
-                                      onDragEnter={() => setDragOverIndex(matIdx)}
-                                      onDragOver={e => e.preventDefault()}
-                                      onDragEnd={() => {
-                                        if (dragIndex !== null && dragOverIndex !== null) reorderMaterials(dragIndex, dragOverIndex);
-                                        setDragIndex(null);
-                                        setDragOverIndex(null);
-                                      }}
+                                      onDragStart={e => { e.stopPropagation(); setDragMat({ mat, fromTopicId: topic.id, fromIdx: matIdx }); }}
+                                      onDragEnter={e => { e.stopPropagation(); setDragMatOverIdx(matIdx); setDragMatOverTopicId(topic.id); }}
+                                      onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+                                      onDragEnd={() => { setDragMat(null); setDragMatOverTopicId(null); setDragMatOverIdx(null); }}
                                       style={{
                                         display: 'flex', alignItems: 'center', gap: '8px',
                                         padding: '6px 10px', borderRadius: '8px',
-                                        background: dragOverIndex === matIdx && dragIndex !== matIdx
-                                          ? 'rgba(124,58,237,0.1)'
-                                          : 'rgba(148,163,184,0.04)',
-                                        border: `1px solid ${dragOverIndex === matIdx && dragIndex !== matIdx ? 'rgba(124,58,237,0.35)' : 'rgba(148,163,184,0.06)'}`,
-                                        opacity: dragIndex === matIdx ? 0.4 : 1,
+                                        background: dragMatOverTopicId === topic.id && dragMatOverIdx === matIdx && dragMat?.fromIdx !== matIdx
+                                          ? 'rgba(124,58,237,0.1)' : 'rgba(148,163,184,0.04)',
+                                        border: `1px solid ${dragMatOverTopicId === topic.id && dragMatOverIdx === matIdx && dragMat?.fromIdx !== matIdx ? 'rgba(124,58,237,0.35)' : 'rgba(148,163,184,0.06)'}`,
+                                        opacity: dragMat?.mat.id === mat.id ? 0.4 : 1,
                                         transition: 'background 120ms, border-color 120ms, opacity 120ms',
                                         cursor: 'grab',
                                       }}
                                     >
-                                      {/* Drag handle */}
-                                      <span
-                                        title="Drag to reorder"
-                                        style={{ fontSize: '0.85rem', color: 'var(--neutral-600)', cursor: 'grab', flexShrink: 0, lineHeight: 1, userSelect: 'none' }}
-                                      >⠿</span>
-
+                                      <span title="Drag to reorder or move to another topic" style={{ fontSize: '0.85rem', color: 'var(--neutral-600)', cursor: 'grab', flexShrink: 0, lineHeight: 1, userSelect: 'none' }}>⠿</span>
                                       <span style={{ fontSize: '0.9rem', flexShrink: 0 }}>{getMaterialIcon(mat.type)}</span>
                                       <span style={{ flex: 1, fontSize: '0.82rem', color: 'var(--neutral-200)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mat.title}</span>
                                       <span className="badge" style={{ fontSize: '0.55rem', padding: '1px 5px', background: 'rgba(124,58,237,0.1)', color: 'var(--primary-300)', flexShrink: 0 }}>{mat.type}</span>
-
                                       <div className="flex gap-xs" style={{ alignItems: 'center' }}>
-                                        {/* Up / Down arrow buttons */}
-                                        <button
-                                          className="btn btn-ghost"
-                                          style={{ padding: '1px 3px', fontSize: '0.6rem', opacity: matIdx === 0 ? 0.25 : 0.6 }}
-                                          disabled={matIdx === 0}
-                                          onClick={() => reorderMaterials(matIdx, matIdx - 1)}
-                                          title="Move up"
-                                        >▲</button>
-                                        <button
-                                          className="btn btn-ghost"
-                                          style={{ padding: '1px 3px', fontSize: '0.6rem', opacity: matIdx === materials.length - 1 ? 0.25 : 0.6 }}
-                                          disabled={matIdx === materials.length - 1}
-                                          onClick={() => reorderMaterials(matIdx, matIdx + 1)}
-                                          title="Move down"
-                                        >▼</button>
-
+                                        <button className="btn btn-ghost" style={{ padding: '1px 3px', fontSize: '0.6rem', opacity: matIdx === 0 ? 0.25 : 0.6 }} disabled={matIdx === 0} onClick={() => reorderMaterials(topic.id, matIdx, matIdx - 1)} title="Move up">▲</button>
+                                        <button className="btn btn-ghost" style={{ padding: '1px 3px', fontSize: '0.6rem', opacity: matIdx === getMats(topic.id).length - 1 ? 0.25 : 0.6 }} disabled={matIdx === getMats(topic.id).length - 1} onClick={() => reorderMaterials(topic.id, matIdx, matIdx + 1)} title="Move down">▼</button>
                                         {canPreview(mat.type) && (
-                                          <button
-                                            onClick={() => handlePreview(mat)}
-                                            style={{
-                                              background: 'linear-gradient(90deg, #8b5cf6, #0ea5e9)',
-                                              color: '#fff',
-                                              border: 'none',
-                                              borderRadius: '50px',
-                                              padding: '4px 14px',
-                                              fontSize: '0.75rem',
-                                              fontWeight: 600,
-                                              display: 'flex',
-                                              alignItems: 'center',
-                                              gap: '6px',
-                                              cursor: 'pointer',
-                                              boxShadow: '0 4px 10px -2px rgba(139, 92, 246, 0.5)',
-                                            }}
-                                          >
-                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
-                                            Play
+                                          <button onClick={() => handlePreview(mat)} style={{ background: 'linear-gradient(90deg, #8b5cf6, #0ea5e9)', color: '#fff', border: 'none', borderRadius: '50px', padding: '4px 14px', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', boxShadow: '0 4px 10px -2px rgba(139, 92, 246, 0.5)' }}>
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>Play
                                           </button>
                                         )}
                                         <button className="btn btn-ghost" style={{ padding: '1px 3px', fontSize: '0.6rem' }} onClick={() => { setEditingMaterial(mat); setMaterialForm({ title: mat.title, type: mat.type, url: mat.url, description: mat.description || '' }); setMaterialModal(true); }}>✏️</button>
@@ -445,7 +470,7 @@ export default function LMSContentManager() {
                               </div>
                             )}
                             <MCQManager topicId={topic.id} topicName={topic.name} bulkTrigger={mcqBulkTrigger} />
-                            {materials.length === 0 && <p style={{ fontSize: '0.78rem', color: 'var(--neutral-500)', textAlign: 'center', padding: '8px 0' }}>No content yet. Click below to add.</p>}
+                            {getMats(topic.id).length === 0 && <p style={{ fontSize: '0.78rem', color: 'var(--neutral-500)', textAlign: 'center', padding: '8px 0' }}>No content yet. Click below to add.</p>}
                             <div style={{ marginTop: '12px', textAlign: 'center' }}>
                               <button className="btn btn-ghost btn-sm" style={{ color: 'var(--primary-400)', fontSize: '0.8rem', padding: '6px 12px' }} onClick={() => setResourcePickerModal(true)}>
                                 + Add Materials / Quizzes
@@ -677,13 +702,14 @@ export default function LMSContentManager() {
             if (xrTopics.length === 0) return;
 
             setSaving(true);
+            const currentMats = getMats(selectedTopic.id);
             const payloads = xrTopics.map((topic, i) => ({
               title: topic.name,
               type: 'xr',
               url: JSON.stringify({ topic_id: topic.id, chapter_id: chapterId }),
               description: 'XR Experiential Learning Content',
               topic_id: selectedTopic.id,
-              sort_order: materials.length + i,
+              sort_order: currentMats.length + i,
             }));
 
             const { error } = await supabase.from('materials').insert(payloads);
@@ -697,7 +723,7 @@ export default function LMSContentManager() {
 
             // Reload materials to show newly added ones
             const { data } = await supabase.from('materials').select('*').eq('topic_id', selectedTopic.id).order('sort_order');
-            setMaterials(data || []);
+            setMats(selectedTopic.id, data || []);
           }} 
         />
       )}
