@@ -70,6 +70,7 @@ export default function StudentExplorePage() {
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
   const [previewMaterial, setPreviewMaterial] = useState<Material | null>(null);
+  const [previewIframeError, setPreviewIframeError] = useState(false);
 
   const [isPaid, setIsPaid] = useState(false);
 
@@ -475,7 +476,7 @@ export default function StudentExplorePage() {
 
       {/* Preview Modal for iframes, videos, pdfs */}
       {previewMaterial && (
-        <div className="modal-overlay" onClick={() => setPreviewMaterial(null)} style={{ padding: '24px', zIndex: 200 }}>
+        <div className="modal-overlay" onClick={() => { setPreviewMaterial(null); setPreviewIframeError(false); }} style={{ padding: '24px', zIndex: 200 }}>
           <div onClick={e => e.stopPropagation()} style={{
             width: '100%', maxWidth: '1100px', height: '85vh',
             background: 'var(--neutral-850)', border: '1px solid var(--surface-glass-border)',
@@ -503,13 +504,30 @@ export default function StudentExplorePage() {
             <div style={{ flex: 1, position: 'relative', background: '#000' }}>
               {previewMaterial.type === 'video' ? (
                 <video src={previewMaterial.url} controls autoPlay style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              ) : previewIframeError ? (
+                <iframe
+                  key="fallback"
+                  src="https://iluzialabs.com/top-virtual-labs-in-india/"
+                  style={{ width: '100%', height: '100%', border: 'none' }}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                  allowFullScreen
+                  title="Iluzia Virtual Labs"
+                />
               ) : (
                 <iframe
+                  key="primary"
                   src={getPreviewUrl(previewMaterial)}
                   style={{ width: '100%', height: '100%', border: 'none' }}
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                   allowFullScreen
                   title={previewMaterial.title}
+                  onError={() => setPreviewIframeError(true)}
+                  onLoad={e => {
+                    try {
+                      const doc = (e.target as HTMLIFrameElement).contentDocument;
+                      if (doc && (!doc.body || doc.body.innerHTML.trim() === '')) setPreviewIframeError(true);
+                    } catch { /* cross-origin: assume OK */ }
+                  }}
                 />
               )}
             </div>

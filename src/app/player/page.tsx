@@ -81,13 +81,73 @@ function PlayerContent() {
     };
   }, [contentUrl]);
 
+  const audioGuardRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!contentUrl) return;
+
+    // ── Layer 1: Patch AudioContext.prototype.suspend to a no-op ──────────
+    // This prevents Unity's own audio manager and any browser API from
+    // ever suspending the context, even if they try explicitly.
+    const originalSuspend = AudioContext.prototype.suspend;
+    AudioContext.prototype.suspend = function () {
+      // Silently return a resolved promise so callers don't throw
+      return Promise.resolve();
+    };
+
+    // Intercept console.error to filter out harmless Unity warnings
+    const originalConsoleError = console.error;
+    console.error = (...args) => {
+      if (typeof args[0] === 'string' && args[0].includes('FS.syncfs operations in flight at once')) {
+        return;
+      }
+      originalConsoleError.apply(console, args);
+    };
+
+    // ── Layer 3: Block mute keyboard shortcuts in capture phase ───────────
+    const blockMuteKeys = (e: KeyboardEvent) => {
+      // Block M key (common Unity/browser mute toggle) and AudioWorklet mute combos
+      if (e.key === 'm' || e.key === 'M') {
+        e.stopPropagation();
+      }
+    };
+    window.addEventListener('keydown', blockMuteKeys, { capture: true });
+
+    // Set Unity config globally before loader runs
+    window.__UNITY_CFG__ = {
+      rootElId: 'unity-root',
+      statusElId: null,
+      canvasId: 'unity-canvas',
+      loaderUrl: `${BASE}${BUILD_PATH}/MyBuild.loader.js?v=2024`,
+      dataUrl: `${BASE}${BUILD_PATH}/MyBuild.data.gz?v=2024`,
+      frameworkUrl: `${BASE}${BUILD_PATH}/MyBuild.framework.js.gz?v=2024`,
+      wasmUrl: `${BASE}${BUILD_PATH}/MyBuild.wasm.gz?v=2024`,
+      goName: 'VeekshaLibraryBehaviourController',
+      enableCoi: false,
+    };
+
+    return () => {
+      // Restore all patches on unmount
+      AudioContext.prototype.suspend = originalSuspend;
+      console.error = originalConsoleError;
+      window.removeEventListener('keydown', blockMuteKeys, { capture: true });
+      if (audioGuardRef.current) clearInterval(audioGuardRef.current);
+      if (unityRef.current) {
+        try {
+          (unityRef.current as any).Quit();
+        } catch (e) {
+          console.error('Failed to quit Unity instance:', e);
+        }
+      }
+    };
+  }, [contentUrl]);
+
   const handleLoaderReady = () => {
     if (!contentUrl || !canvasRef.current) return;
 
     const cfg = window.__UNITY_CFG__ as Record<string, string> | undefined;
     if (!cfg) return;
 
-    // Use createUnityInstance provided by the loader
     const createFn = window.createUnityInstance;
     if (!createFn) {
       setError('Unity loader did not initialize. Please try again.');
@@ -112,40 +172,48 @@ function PlayerContent() {
         unityRef.current = instance;
         setStatus('ready');
 
-        // ── Unlock Web Audio API automatically ──────────────────
-        // Since the player is now loaded in an iframe with allow="autoplay",
-        // the browser should allow audio context to resume immediately without gesture!
-        const unlockAudio = () => {
+        // ── Layer 2: Polling guard — force-resume every 500ms ─────────────
+        // Even with suspend patched, the browser may still suspend the context
+        // on page visibility changes or OS media key events.
+        const getCtx = (): AudioContext | undefined => {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const mod = (instance as any)?.Module;
-            const ctx: AudioContext | undefined = mod?.AL?.currentCtx;
-            if (ctx && ctx.state === 'suspended') {
-              ctx.resume().catch(() => {});
-            }
-          } catch {}
-          setAudioUnlocked(true);
+            return (instance as any)?.Module?.AL?.currentCtx;
+          } catch {
+            return undefined;
+          }
         };
-        
-        // Try to unlock immediately!
-        setTimeout(unlockAudio, 500);
-        setTimeout(unlockAudio, 1500);
-        setTimeout(unlockAudio, 3000);
 
-        // Fallback: Use capture phase so Unity's stopPropagation doesn't block this!
-        window.addEventListener('pointerdown', unlockAudio, { capture: true, once: true });
-        window.addEventListener('keydown', unlockAudio, { capture: true, once: true });
-        // ────────────────────────────────────────────────────────────────
+        const forceAudioOn = () => {
+          const ctx = getCtx();
+          if (ctx && ctx.state !== 'running') {
+            ctx.resume().catch(() => {});
+          }
+        };
 
-        // Wait a moment then send the content URL
+        // Immediate unlocks
+        forceAudioOn();
+        setTimeout(forceAudioOn, 500);
+        setTimeout(forceAudioOn, 1500);
+        setTimeout(forceAudioOn, 3000);
+
+        // Continuous guard — runs for the lifetime of the player
+        audioGuardRef.current = setInterval(forceAudioOn, 500);
+
+        // Re-unlock on any user interaction (capture phase bypasses Unity's stopPropagation)
+        const onInteraction = () => forceAudioOn();
+        window.addEventListener('pointerdown', onInteraction, { capture: true });
+        window.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') forceAudioOn();
+        });
+        // ─────────────────────────────────────────────────────────────────
+
+        setAudioUnlocked(true);
+
+        // Send content URL to Unity
         setTimeout(() => {
           try {
             const inst = instance as { SendMessage: (go: string, method: string, url: string) => void };
-            inst.SendMessage(
-              'VeekshaLibraryBehaviourController',
-              'LoadContentFilePath',
-              contentUrl,
-            );
+            inst.SendMessage('VeekshaLibraryBehaviourController', 'LoadContentFilePath', contentUrl);
           } catch (e) {
             console.error('SendMessage error:', e);
           }
@@ -157,6 +225,7 @@ function PlayerContent() {
         setStatus('error');
       });
   };
+
 
   if (!contentUrl) {
     return (
@@ -217,7 +286,6 @@ function PlayerContent() {
         </div>
       )}
 
-      {/* Error state */}
       {status === 'error' && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: 15,
@@ -230,12 +298,23 @@ function PlayerContent() {
             {error || 'Unity WebGL player could not be initialized.'}
           </p>
 
-          {/* Fallback: open in XR AI player directly */}
+          {/* Primary fallback: Iluzia Virtual Labs */}
           <a
-            href={`${BASE}/3dexperiential-learning/player?content=${encodeURIComponent(contentUrl)}`}
+            href="https://iluzialabs.com/top-virtual-labs-in-india/"
             target="_blank"
             rel="noopener noreferrer"
             className="btn btn-primary"
+          >
+            🥽 Explore Virtual Labs
+          </a>
+
+          {/* Secondary fallback: open in XR AI player directly */}
+          <a
+            href={`${BASE}/3dexperiential-learning/player?content=${encodeURIComponent(contentUrl!)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-ghost"
+            style={{ color: '#94a3b8' }}
           >
             🔗 Open in XR AI Player
           </a>

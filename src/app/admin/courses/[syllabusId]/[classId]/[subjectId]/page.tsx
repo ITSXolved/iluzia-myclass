@@ -54,6 +54,11 @@ export default function LMSContentManager() {
   const [mcqBulkTrigger, setMcqBulkTrigger] = useState(0);
   const [resourcePickerModal, setResourcePickerModal] = useState(false);
   const [xrPickerModal, setXrPickerModal] = useState(false);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  // Per-chapter topic drag state
+  const [dragTopic, setDragTopic] = useState<{ chapterId: number; from: number; over: number | null } | null>(null);
+  const [previewIframeError, setPreviewIframeError] = useState(false);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -142,6 +147,35 @@ export default function LMSContentManager() {
   const getMaterialIcon = (type: string) => MATERIAL_TYPES.find(t => t.value === type)?.icon || '📎';
 
   const canPreview = (type: string) => ['iframe', 'video', 'youtube', 'pdf', 'xr'].includes(type);
+
+  /** Reorder topics within a chapter optimistically, then persist sort_order to Supabase */
+  const reorderTopics = async (chapterId: number, from: number, to: number) => {
+    if (from === to) return;
+    const chTopicsSorted = topics.filter(t => t.chapter_id === chapterId);
+    const rest = topics.filter(t => t.chapter_id !== chapterId);
+    const reordered = [...chTopicsSorted];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(to, 0, moved);
+    const updated = reordered.map((t, i) => ({ ...t, sort_order: i }));
+    setTopics([...rest, ...updated]);
+    await Promise.all(
+      updated.map(t => supabase.from('topics').update({ sort_order: t.sort_order }).eq('id', t.id))
+    );
+  };
+
+  const reorderMaterials = async (from: number, to: number) => {
+    if (from === to) return;
+    const reordered = [...materials];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(to, 0, moved);
+    // Assign fresh sort_order values
+    const updated = reordered.map((m, i) => ({ ...m, sort_order: i }));
+    setMaterials(updated);
+    // Batch upsert – one call per row (small lists, acceptable)
+    await Promise.all(
+      updated.map(m => supabase.from('materials').update({ sort_order: m.sort_order }).eq('id', m.id))
+    );
+  };
 
   const handlePreview = async (mat: Material) => {
     if (mat.type === 'xr') {
@@ -248,19 +282,46 @@ export default function LMSContentManager() {
                 {isExp && (
                   <div style={{ borderTop: '1px solid var(--surface-glass-border)', padding: '8px 12px 12px' }}>
                     {chTopics.map((topic, ti) => (
-                      <div key={topic.id} style={{ marginBottom: '4px' }}>
+                      <div
+                        key={topic.id}
+                        style={{ marginBottom: '4px' }}
+                        draggable
+                        onDragStart={e => { e.stopPropagation(); setDragTopic({ chapterId: ch.id, from: ti, over: null }); }}
+                        onDragEnter={e => { e.stopPropagation(); setDragTopic(prev => prev ? { ...prev, over: ti } : null); }}
+                        onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+                        onDragEnd={e => {
+                          e.stopPropagation();
+                          if (dragTopic && dragTopic.over !== null) reorderTopics(ch.id, dragTopic.from, dragTopic.over);
+                          setDragTopic(null);
+                        }}
+                      >
                         <div
                           style={{
                             display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px',
-                            borderRadius: '10px', cursor: 'pointer',
-                            background: selectedTopic?.id === topic.id ? 'rgba(6,182,212,0.1)' : 'rgba(148,163,184,0.03)',
-                            border: `1px solid ${selectedTopic?.id === topic.id ? 'rgba(6,182,212,0.25)' : 'transparent'}`,
+                            borderRadius: '10px', cursor: 'grab',
+                            background: dragTopic?.chapterId === ch.id && dragTopic.over === ti && dragTopic.from !== ti
+                              ? 'rgba(124,58,237,0.1)'
+                              : selectedTopic?.id === topic.id ? 'rgba(6,182,212,0.1)' : 'rgba(148,163,184,0.03)',
+                            border: `1px solid ${
+                              dragTopic?.chapterId === ch.id && dragTopic.over === ti && dragTopic.from !== ti
+                                ? 'rgba(124,58,237,0.35)'
+                                : selectedTopic?.id === topic.id ? 'rgba(6,182,212,0.25)' : 'transparent'
+                            }`,
+                            opacity: dragTopic?.chapterId === ch.id && dragTopic.from === ti ? 0.4 : 1,
                             transition: 'all 150ms',
                           }}
-                          onClick={() => setSelectedTopic(selectedTopic?.id === topic.id ? null : topic)}>
+                          onClick={() => setSelectedTopic(selectedTopic?.id === topic.id ? null : topic)}
+                        >
+                          {/* Drag handle */}
+                          <span
+                            title="Drag to reorder"
+                            style={{ fontSize: '0.85rem', color: 'var(--neutral-600)', cursor: 'grab', flexShrink: 0, lineHeight: 1, userSelect: 'none' }}
+                            onClick={e => e.stopPropagation()}
+                          >⠿</span>
+
                           <span style={{
                             width: '26px', height: '26px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 700,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                             background: selectedTopic?.id === topic.id ? 'rgba(6,182,212,0.2)' : 'rgba(148,163,184,0.08)',
                             color: selectedTopic?.id === topic.id ? 'var(--accent-400)' : 'var(--neutral-400)',
                           }}>{String(ti + 1).padStart(2, '0')}</span>
@@ -269,7 +330,22 @@ export default function LMSContentManager() {
                             fontWeight: selectedTopic?.id === topic.id ? 600 : 400,
                             color: selectedTopic?.id === topic.id ? 'var(--accent-400)' : 'var(--neutral-200)',
                           }}>{topic.name}</span>
-                          <div className="flex gap-xs" onClick={e => e.stopPropagation()}>
+                          <div className="flex gap-xs" onClick={e => e.stopPropagation()} style={{ alignItems: 'center' }}>
+                            {/* Up / Down arrows */}
+                            <button
+                              className="btn btn-ghost"
+                              style={{ padding: '1px 3px', fontSize: '0.6rem', opacity: ti === 0 ? 0.25 : 0.5 }}
+                              disabled={ti === 0}
+                              onClick={() => reorderTopics(ch.id, ti, ti - 1)}
+                              title="Move up"
+                            >▲</button>
+                            <button
+                              className="btn btn-ghost"
+                              style={{ padding: '1px 3px', fontSize: '0.6rem', opacity: ti === chTopics.length - 1 ? 0.25 : 0.5 }}
+                              disabled={ti === chTopics.length - 1}
+                              onClick={() => reorderTopics(ch.id, ti, ti + 1)}
+                              title="Move down"
+                            >▼</button>
                             <button className="btn btn-ghost" style={{ padding: '2px 4px', fontSize: '0.65rem', opacity: 0.5 }}
                               onClick={() => { setTargetChapterId(topic.chapter_id); setEditingTopic(topic); setTopicForm({ name: topic.name, description: topic.description || '' }); setTopicModal(true); }}>✏️</button>
                             <button className={`btn ${deleteConfirm === `tp-${topic.id}` ? 'btn-danger' : 'btn-ghost'}`}
@@ -287,31 +363,76 @@ export default function LMSContentManager() {
                               <div style={{ marginBottom: '12px' }}>
                                 <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--neutral-500)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>📎 Materials ({materials.length})</div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                  {materials.map(mat => (
-                                    <div key={mat.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', borderRadius: '8px', background: 'rgba(148,163,184,0.04)', border: '1px solid rgba(148,163,184,0.06)' }}>
-                                      <span style={{ fontSize: '0.9rem' }}>{getMaterialIcon(mat.type)}</span>
+                                  {materials.map((mat, matIdx) => (
+                                    <div
+                                      key={mat.id}
+                                      draggable
+                                      onDragStart={() => setDragIndex(matIdx)}
+                                      onDragEnter={() => setDragOverIndex(matIdx)}
+                                      onDragOver={e => e.preventDefault()}
+                                      onDragEnd={() => {
+                                        if (dragIndex !== null && dragOverIndex !== null) reorderMaterials(dragIndex, dragOverIndex);
+                                        setDragIndex(null);
+                                        setDragOverIndex(null);
+                                      }}
+                                      style={{
+                                        display: 'flex', alignItems: 'center', gap: '8px',
+                                        padding: '6px 10px', borderRadius: '8px',
+                                        background: dragOverIndex === matIdx && dragIndex !== matIdx
+                                          ? 'rgba(124,58,237,0.1)'
+                                          : 'rgba(148,163,184,0.04)',
+                                        border: `1px solid ${dragOverIndex === matIdx && dragIndex !== matIdx ? 'rgba(124,58,237,0.35)' : 'rgba(148,163,184,0.06)'}`,
+                                        opacity: dragIndex === matIdx ? 0.4 : 1,
+                                        transition: 'background 120ms, border-color 120ms, opacity 120ms',
+                                        cursor: 'grab',
+                                      }}
+                                    >
+                                      {/* Drag handle */}
+                                      <span
+                                        title="Drag to reorder"
+                                        style={{ fontSize: '0.85rem', color: 'var(--neutral-600)', cursor: 'grab', flexShrink: 0, lineHeight: 1, userSelect: 'none' }}
+                                      >⠿</span>
+
+                                      <span style={{ fontSize: '0.9rem', flexShrink: 0 }}>{getMaterialIcon(mat.type)}</span>
                                       <span style={{ flex: 1, fontSize: '0.82rem', color: 'var(--neutral-200)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mat.title}</span>
-                                      <span className="badge" style={{ fontSize: '0.55rem', padding: '1px 5px', background: 'rgba(124,58,237,0.1)', color: 'var(--primary-300)' }}>{mat.type}</span>
-                                      <div className="flex gap-xs">
+                                      <span className="badge" style={{ fontSize: '0.55rem', padding: '1px 5px', background: 'rgba(124,58,237,0.1)', color: 'var(--primary-300)', flexShrink: 0 }}>{mat.type}</span>
+
+                                      <div className="flex gap-xs" style={{ alignItems: 'center' }}>
+                                        {/* Up / Down arrow buttons */}
+                                        <button
+                                          className="btn btn-ghost"
+                                          style={{ padding: '1px 3px', fontSize: '0.6rem', opacity: matIdx === 0 ? 0.25 : 0.6 }}
+                                          disabled={matIdx === 0}
+                                          onClick={() => reorderMaterials(matIdx, matIdx - 1)}
+                                          title="Move up"
+                                        >▲</button>
+                                        <button
+                                          className="btn btn-ghost"
+                                          style={{ padding: '1px 3px', fontSize: '0.6rem', opacity: matIdx === materials.length - 1 ? 0.25 : 0.6 }}
+                                          disabled={matIdx === materials.length - 1}
+                                          onClick={() => reorderMaterials(matIdx, matIdx + 1)}
+                                          title="Move down"
+                                        >▼</button>
+
                                         {canPreview(mat.type) && (
-                                          <button 
+                                          <button
                                             onClick={() => handlePreview(mat)}
-                                            style={{ 
-                                              background: 'linear-gradient(90deg, #8b5cf6, #0ea5e9)', 
-                                              color: '#fff', 
-                                              border: 'none', 
-                                              borderRadius: '50px', 
-                                              padding: '4px 14px', 
-                                              fontSize: '0.75rem', 
-                                              fontWeight: 600, 
-                                              display: 'flex', 
-                                              alignItems: 'center', 
-                                              gap: '6px', 
+                                            style={{
+                                              background: 'linear-gradient(90deg, #8b5cf6, #0ea5e9)',
+                                              color: '#fff',
+                                              border: 'none',
+                                              borderRadius: '50px',
+                                              padding: '4px 14px',
+                                              fontSize: '0.75rem',
+                                              fontWeight: 600,
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '6px',
                                               cursor: 'pointer',
-                                              boxShadow: '0 4px 10px -2px rgba(139, 92, 246, 0.5)'
+                                              boxShadow: '0 4px 10px -2px rgba(139, 92, 246, 0.5)',
                                             }}
                                           >
-                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
                                             Play
                                           </button>
                                         )}
@@ -478,7 +599,7 @@ export default function LMSContentManager() {
 
       {/* Preview Modal */}
       {previewMaterial && (
-        <div className="modal-overlay" onClick={() => setPreviewMaterial(null)} style={{ padding: '24px', zIndex: 200 }}>
+        <div className="modal-overlay" onClick={() => { setPreviewMaterial(null); setPreviewIframeError(false); }} style={{ padding: '24px', zIndex: 200 }}>
           <div onClick={e => e.stopPropagation()} style={{
             width: '100%', maxWidth: '1100px', height: '85vh',
             background: 'var(--neutral-850)', border: '1px solid var(--surface-glass-border)',
@@ -511,13 +632,32 @@ export default function LMSContentManager() {
                   autoPlay
                   style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                 />
+              ) : previewIframeError ? (
+                /* Fallback when iframe fails to load */
+                <iframe
+                  key="fallback"
+                  src="https://iluzialabs.com/top-virtual-labs-in-india/"
+                  style={{ width: '100%', height: '100%', border: 'none' }}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                  allowFullScreen
+                  title="Iluzia Virtual Labs"
+                />
               ) : (
                 <iframe
+                  key="primary"
                   src={getPreviewUrl(previewMaterial)}
                   style={{ width: '100%', height: '100%', border: 'none' }}
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                   allowFullScreen
                   title={previewMaterial.title}
+                  onError={() => setPreviewIframeError(true)}
+                  onLoad={e => {
+                    try {
+                      // If the iframe loaded a blank/error page (cross-origin won't throw, but same-origin might)
+                      const doc = (e.target as HTMLIFrameElement).contentDocument;
+                      if (doc && (!doc.body || doc.body.innerHTML.trim() === '')) setPreviewIframeError(true);
+                    } catch { /* cross-origin: cannot read, assume OK */ }
+                  }}
                 />
               )}
             </div>
@@ -529,32 +669,33 @@ export default function LMSContentManager() {
       {xrPickerModal && (
         <XRPickerModal 
           onClose={() => setXrPickerModal(false)} 
-          onSelect={async (topic: XRTopicRecord, chapterId: number) => {
+          onSelect={async (xrTopics: XRTopicRecord[], chapterId: number) => {
             if (!selectedTopic) {
               alert("Error: No LMS topic selected.");
               return;
             }
-            
+            if (xrTopics.length === 0) return;
+
             setSaving(true);
-            const payload = {
+            const payloads = xrTopics.map((topic, i) => ({
               title: topic.name,
               type: 'xr',
               url: JSON.stringify({ topic_id: topic.id, chapter_id: chapterId }),
               description: 'XR Experiential Learning Content',
               topic_id: selectedTopic.id,
-              sort_order: materials.length
-            };
-            
-            const { error } = await supabase.from('materials').insert(payload);
+              sort_order: materials.length + i,
+            }));
+
+            const { error } = await supabase.from('materials').insert(payloads);
             if (error) {
               console.error("Insert error:", error);
-              alert("Failed to save material: " + error.message);
+              alert("Failed to save materials: " + error.message);
             } else {
               setXrPickerModal(false);
             }
             setSaving(false);
-            
-            // Reload materials to show the newly added one
+
+            // Reload materials to show newly added ones
             const { data } = await supabase.from('materials').select('*').eq('topic_id', selectedTopic.id).order('sort_order');
             setMaterials(data || []);
           }} 
