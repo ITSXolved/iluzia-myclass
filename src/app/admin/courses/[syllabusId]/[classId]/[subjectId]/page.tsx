@@ -164,6 +164,19 @@ export default function LMSContentManager() {
 
   const canPreview = (type: string) => ['iframe', 'video', 'youtube', 'pdf', 'xr'].includes(type);
 
+  /** Reorder chapters within a subject optimistically, then persist sort_order to Supabase */
+  const reorderChapters = async (from: number, to: number) => {
+    if (from === to) return;
+    const reordered = [...chapters];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(to, 0, moved);
+    const updated = reordered.map((ch, i) => ({ ...ch, sort_order: i }));
+    setChapters(updated);
+    await Promise.all(
+      updated.map(ch => supabase.from('chapters').update({ sort_order: ch.sort_order }).eq('id', ch.id))
+    );
+  };
+
   /** Reorder topics within a chapter optimistically, then persist sort_order to Supabase */
   const reorderTopics = async (chapterId: number, from: number, to: number) => {
     if (from === to) return;
@@ -265,7 +278,7 @@ export default function LMSContentManager() {
             <div style={{ padding: '48px 16px', textAlign: 'center', color: 'var(--neutral-500)' }}>
               <p style={{ marginBottom: '12px' }}>No chapters yet. Start building your course.</p>
             </div>
-          ) : chapters.map(ch => {
+          ) : chapters.map((ch, chIdx) => {
             const chTopics = topics.filter(t => t.chapter_id === ch.id);
             const isExp = expandedChapters.has(ch.id);
             return (
@@ -288,11 +301,26 @@ export default function LMSContentManager() {
                       {chTopics.length} topic{chTopics.length !== 1 ? 's' : ''}
                     </div>
                   </div>
-                  <div className="flex gap-xs" onClick={e => e.stopPropagation()}>
-                    <button className="btn btn-ghost" style={{ padding: '4px 6px', fontSize: '0.75rem' }}
+                  <div className="flex gap-xs" onClick={e => e.stopPropagation()} style={{ alignItems: 'center' }}>
+                    {/* Up / Down arrows to swap chapters */}
+                    <button
+                      className="btn btn-ghost"
+                      style={{ padding: '4px 6px', fontSize: '0.65rem', opacity: chIdx === 0 ? 0.25 : 0.5 }}
+                      disabled={chIdx === 0}
+                      onClick={() => reorderChapters(chIdx, chIdx - 1)}
+                      title="Move up"
+                    >▲</button>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ padding: '4px 6px', fontSize: '0.65rem', opacity: chIdx === chapters.length - 1 ? 0.25 : 0.5 }}
+                      disabled={chIdx === chapters.length - 1}
+                      onClick={() => reorderChapters(chIdx, chIdx + 1)}
+                      title="Move down"
+                    >▼</button>
+                    <button className="btn btn-ghost" style={{ padding: '4px 6px', fontSize: '0.75rem', opacity: 0.7 }}
                       onClick={() => { setEditingChapter(ch); setChapterForm({ name: ch.name, description: ch.description || '' }); setChapterModal(true); }}>✏️</button>
                     <button className={`btn ${deleteConfirm === `ch-${ch.id}` ? 'btn-danger' : 'btn-ghost'}`}
-                      style={{ padding: '4px 6px', fontSize: '0.75rem' }}
+                      style={{ padding: '4px 6px', fontSize: '0.75rem', opacity: 0.7 }}
                       onClick={() => deleteChapter(ch.id)}>
                       {deleteConfirm === `ch-${ch.id}` ? '⚠' : '🗑️'}
                     </button>
