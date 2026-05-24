@@ -35,8 +35,6 @@ export default function LandingPage() {
       img.src = currentFrame(i);
       img.onload = () => {
         loadedCount++;
-        // If we want to only start rendering once all are loaded, we can track this
-        // But for now, we just push the references.
       };
       loadedImages.push(img);
     }
@@ -53,7 +51,6 @@ export default function LandingPage() {
     if (!ctx) return;
     
     // Set up internal canvas res to perfectly fit a standard 16:9 monitor
-    // The images from ezgif might have a specific aspect ratio. Let's assume standard HD.
     canvas.width = 1920;
     canvas.height = 1080;
 
@@ -109,7 +106,7 @@ export default function LandingPage() {
       <nav className={s.nav}>
         <Link href="/" className={s.logo}>
           <Image src="/iluzia-logo.png" alt="iLuZia Lab" width={40} height={40} style={{ objectFit: 'contain', width: 'auto', height: '40px' }} />
-          iLuZia | 3DX
+          iLuZia | Immersive
         </Link>
         <div className={s.navLinks}>
           <a href="#vision">The Vision</a>
@@ -128,19 +125,36 @@ export default function LandingPage() {
       {/* ── Scrollable Content Overlays ── */}
       <main className={s.scrollContent}>
         {/* Section 1: The Catalyst */}
-        <section className={s.section} id="vision" style={{ height: '140vh', alignItems: 'flex-start', paddingTop: '30vh' }}>
-          <motion.div 
-            className={s.heroContent}
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            whileInView={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-          >
-            <h1 className={s.heroTitle}>Beyond the <span style={{ color: 'var(--accent-500)' }}>Screen.</span></h1>
-            <h2 className={s.heroSubtitle}>Learn in 4D.</h2>
-            <p className={s.heroSubtext}>
-              Bridging the gap between conceptual engineering and physical <br/> reality through spatial computing.
-            </p>
-          </motion.div>
+        <section className={s.section} id="vision" style={{ height: '140vh', alignItems: 'flex-start', paddingTop: '65vh' }}>
+          <div className={s.perspectiveContainer}>
+            <motion.div
+              initial={{ opacity: 0, y: 40, rotateX: 15 }}
+              whileInView={{ opacity: 1, y: 0, rotateX: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 1.0, ease: "easeOut" }}
+            >
+              <motion.div 
+                className={s.heroContent}
+                animate={{
+                  y: [0, -12, 0],
+                  rotateX: [-3, 3, -3],
+                  rotateY: [-4, 4, -4],
+                }}
+                transition={{
+                  duration: 8,
+                  repeat: Infinity,
+                  ease: "easeInOut"
+                }}
+                style={{ transformStyle: 'preserve-3d' }}
+              >
+                <h1 className={s.heroTitle3D}>
+                  <span className={s.whiteText3D}>Beyond the</span>{' '}
+                  <span className={s.cyanText3D}>Screen.</span>
+                </h1>
+                <h2 className={s.heroSubtitle3D}>National Award Winner of Immersive Learning</h2>
+              </motion.div>
+            </motion.div>
+          </div>
         </section>
 
         {/* Section 2: The Anatomy of Innovation */}

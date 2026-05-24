@@ -35,9 +35,13 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch (e) {
+    // Treat invalid or stale refresh tokens as unauthenticated
+  }
 
   const { pathname } = request.nextUrl;
 
